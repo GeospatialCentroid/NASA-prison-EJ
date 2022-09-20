@@ -47,3 +47,38 @@ leaflet() %>%
                    radius = ~log(wildfire),
                    stroke = FALSE, fillOpacity = 1)
 
+
+
+# heat index (average number of days from May - Sept 2016 - 2021 in which daily
+# high temp exceeded the 90th percentile of historical daily temperatures, at the county level)
+
+
+heat_days <- read_csv("data/heat_days/data_181732.csv") %>% 
+  group_by(State, County, CountyFIPS) %>% 
+  dplyr::summarise(heat_index = mean(Value))
+
+#get spatial county data to tie to points
+counties <- tigris::counties()
+
+county_heat_index <- counties %>% 
+  mutate(CountyFIPS = paste0(STATEFP, COUNTYFP)) %>% 
+  left_join(heat_days, by = "CountyFIPS") %>% 
+  st_transform(st_crs(prisons))
+
+
+prisons_hi <- prisons %>% 
+  st_join(county_heat_index["heat_index"])
+
+
+
+#quick plot
+leaflet() %>% 
+  addTiles() %>% 
+  addCircleMarkers(data = prisons_hi,
+                   color = "red",
+                   radius = ~sqrt(heat_index),
+                   stroke = FALSE, fillOpacity = 1)
+
+
+
+
