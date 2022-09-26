@@ -5,6 +5,7 @@ library(terra)
 library(tidyverse)
 library(leaflet)
 library(tidygeocoder)
+library(usmap)
 
 
 # read in prison locations
@@ -31,11 +32,25 @@ wf_hi <- terra::rast("L:/Projects_active/EnviroScreen/data/wildfire/Data/whp2020
 
 
 
-# extract conus values from prisons
+# extract values from prisons
 wf_conus <- project(wf_conus, vect(prisons))
 
+wf_ak <- project(wf_ak, vect(prisons))
 
-prisons$wildfire <- terra::extract(wf_conus, vect(prisons))[,2]
+wf_hi <- project(wf_hi, vect(prisons))
+
+#need to separate prisons file for conus, ak and hi
+
+prisons_conus <- prisons %>% filter(!(STATE %in% c("AK", "HI")))
+prisons_ak <- prisons %>% filter(STATE == "AK")
+prisons_hi <- prisons %>% filter(STATE == "HI")
+
+
+prisons_conus$wildfire <- terra::extract(wf_conus, vect(prisons_conus))[,2]
+prisons_ak$wildfire <- terra::extract(wf_ak, vect(prisons_ak))[,2]
+prisons_hi$wildfire <- terra::extract(wf_hi, vect(prisons_hi))[,2]
+
+prisons <- bind_rows(prisons_conus, prisons_ak, prisons_hi)
 
 
 
@@ -115,6 +130,8 @@ prisons$nearest_npl <- st_nearest_feature(prisons, npl_geo)
 prisons$npl_dist <- st_distance(prisons, npl_geo[prisons$nearest_npl,], by_element = TRUE)
 
 
+
+
 #subset prisons within 1km of npl, and which npls those are
 
 prisons_npl1km <- prisons %>% 
@@ -150,8 +167,166 @@ leaflet() %>%
                    ))
 
 
+#map all prisons dist to closest npl
+
+prisons <- prisons %>% 
+  mutate(npl_dist_m = as.numeric(npl_dist))
+
+pal1 <- colorQuantile(palette = "Reds", domain = prisons$npl_dist_m, reverse = TRUE)
+
+#quick plot
+leaflet() %>% 
+  addTiles() %>% 
+  addCircleMarkers(data = prisons,
+                   color = ~pal1(npl_dist_m),
+                   radius = 4.5,
+                   stroke = FALSE, fillOpacity = 0.8)
+
+
+
 # PM2.5 -----------------------------------------------------------
 
 
 aq <- vroom("L:/Projects_active/EnviroScreen/data/epa_cmaq/2017_pm25_daily_average.txt.gz")
 
+
+# clean down to census tract level (values rep by census tract centroids)
+aq_clean <- aq %>% 
+  #convert columns to numeric
+  mutate(Latitude = as.numeric(Latitude),
+         pm_25_daily_av = as.numeric(`pm25_daily_average(ug/m3)`)) %>% 
+  group_by(FIPS) %>% 
+  summarise(pm25_mean = mean(pm_25_daily_av))
+
+
+#make spatial?
+aq_sp <-aq %>% 
+  #convert columns to numeric
+  mutate(Latitude = as.numeric(Latitude),
+         pm_25_daily_av = as.numeric(`pm25_daily_average(ug/m3)`)) %>% 
+  st_as_sf(coords = c("Longitude", "Latitude"), crs = 4326)
+
+
+#find nearest pm25 location for each prison
+prisons$nearest_pm25 <- st_nearest_feature(prisons, aq_sp)
+#this took over a day, so cancelled
+
+
+#add cencus tract geometry and st_join prison points
+censusTract <- tigris::tracts(cb = TRUE)
+
+
+tract_pm25 <- censusTract %>% 
+  left_join(aq_clean, by = c("GEOID" = "FIPS")) %>% 
+  st_transform(st_crs(prisons))
+
+
+prisons_pm25 <- prisons %>% 
+  st_join(tract_pm25["pm25_mean"])
+
+
+
+#quick map
+pal1 <- colorQuantile(palette = "Reds", domain = prisons_pm25$pm25_mean)
+
+#quick plot
+leaflet() %>% 
+  addTiles() %>% 
+  addCircleMarkers(data = prisons_pm25,
+                   color = ~pal1(pm25_mean),
+                   radius = 4.5,
+                   stroke = FALSE, fillOpacity = 0.8)
+
+
+
+
+# MAPS FOR GOOGLE PRES
+
+#combine to single data frame
+
+#convert both back to dataframe with lat/long columns
+p1 <- prisons %>% 
+  mutate(long = unlist(map(.$geometry,1)),
+         lat = unlist(map(.$geometry,2))) %>% 
+  st_drop_geometry() %>% 
+  #add percentiles
+  mutate(wildfire_pct = cume_dist(wildfire)*100,
+         npl_pct = cume_dist(npl_dist_m)*100)
+
+p2 <- prisons_pm25 %>% 
+  mutate(long = unlist(map(.$geometry,1)),
+         lat = unlist(map(.$geometry,2))) %>% 
+  st_drop_geometry() %>% 
+  mutate(pm25_pct = cume_dist(pm25_mean))
+
+prisons_prelim <- left_join(p1, p2, by = "FACILITYID") #this is messy, just skip this for now
+
+
+## use base code for prison location map
+
+#wildfire map ---------------------------------------
+
+wf_map <- usmap_transform(data = p1, input_names = c("long", "lat"))
+
+
+plot_usmap(color = "#b3b3b3") +
+  geom_point(data = wf_map, aes(x = x, y = y, size = wildfire, color = wildfire),
+             alpha = 0.75) +
+  scale_colour_gradient(low = "#ebc7c8", high = "#ad0305")+
+  scale_radius(range = c(1.5, 8))+
+   theme(plot.margin = margin(0,0,0,0,"cm"),
+         legend.position = "none")
+
+ggsave(filename = "www/wildfire_map.png")
+
+# NPL map ----------------------------------------------------
+npl_map <- usmap_transform(data = p1, input_names = c("long", "lat"))
+
+
+plot_usmap(color = "#b3b3b3") +
+  geom_point(data = npl_map, aes(x = x, y = y, size = -log(npl_dist_m), color = -log(npl_dist_m)),
+             alpha = 0.75) +
+  scale_colour_gradient(low = "#bfcbd6", high = "#01294a")+
+  scale_radius(range = c(1, 6))+
+  theme(plot.margin = margin(0,0,0,0,"cm"),
+        legend.position = "none")
+
+ggsave(filename = "www/npl_map.png")
+
+
+
+#pm2.5 map
+pm25_map <- usmap_transform(data = p2, input_names = c("long", "lat"))
+
+
+plot_usmap(color = "#b3b3b3") +
+  geom_point(data = pm25_map, aes(x = x, y = y, size = pm25_pct, color = pm25_pct),
+             alpha = 0.75) +
+  scale_colour_gradient(low = "#b8ccb8", high = "#076904")+
+  scale_radius(range = c(1, 5))+
+  theme(plot.margin = margin(0,0,0,0,"cm"),
+        legend.position = "none")
+
+ggsave(filename = "www/pm25_map.png")
+
+
+
+# PRISON MAP
+
+plot_usmap(color = "#b3b3b3") +
+  geom_point(data = wf_map, aes(x = x, y = y, size = POPULATION, color = TYPE),
+             alpha = 0.6) +
+  scale_color_manual(values = c("FEDERAL" = "#ed7b09", "STATE" = "#34aec7"))+
+  scale_radius(breaks = c(1000, 3000, 6000),
+               labels = c("< 1,000", "3,000", "> 6,000"))+
+  theme(plot.margin = margin(0,0,0,0,"cm"),
+        legend.margin = margin(0,0,0,0,"cm"),
+        legend.key.size = unit(0.5, "cm"),
+        legend.title = element_text(family = "sans", face = "bold",size = 12),
+        legend.text = element_text(family = "sans",size = 9),
+        legend.position = c(0.02,0.15),
+        legend.spacing = unit(0, "cm")) +
+  guides(color = guide_legend(override.aes = list(size = 5)))
+
+
+ggsave(filename = "www/prison_map.png")
