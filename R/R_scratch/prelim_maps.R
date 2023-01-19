@@ -6,10 +6,11 @@ library(tidyverse)
 library(leaflet)
 library(tidygeocoder)
 library(usmap)
+library(vroom)
 
 
 # read in prison locations
-prisons <- st_read("data/Prison_Boundaries.shp") %>% 
+prisons <- st_read("data/raw/Prison_Boundaries.shp") %>% 
   #filter out just state and federal
   filter(TYPE %in% c("STATE", "FEDERAL")) %>% 
   st_transform(4326) %>% 
@@ -257,7 +258,7 @@ p2 <- prisons_pm25 %>%
   mutate(long = unlist(map(.$geometry,1)),
          lat = unlist(map(.$geometry,2))) %>% 
   st_drop_geometry() %>% 
-  mutate(pm25_pct = cume_dist(pm25_mean))
+  mutate(pm25_pct = cume_dist(pm25_mean)*100)
 
 prisons_prelim <- left_join(p1, p2, by = "FACILITYID") #this is messy, just skip this for now
 
@@ -270,12 +271,18 @@ wf_map <- usmap_transform(data = p1, input_names = c("long", "lat"))
 
 
 plot_usmap(color = "#b3b3b3") +
-  geom_point(data = wf_map, aes(x = x, y = y, size = wildfire, color = wildfire),
-             alpha = 0.75) +
-  scale_colour_gradient(low = "#ebc7c8", high = "#ad0305")+
-  scale_radius(range = c(1.5, 8))+
-   theme(plot.margin = margin(0,0,0,0,"cm"),
-         legend.position = "none")
+  geom_point(data = wf_map, aes(x = x, y = y, size = wildfire_pct, color = wildfire_pct),
+             alpha = 0.6) +
+  scale_colour_gradient(low = "#ebc7c8", high = "#c40205")+
+  scale_radius(range = c(0.1, 4))+
+  theme(plot.margin = margin(1,1,1,1,"cm"),
+        legend.margin = margin(0,0,0,0,"cm"),
+        legend.key.size = unit(0.5, "cm"),
+        legend.title = element_text(family = "sans", face = "bold",size = 12),
+        legend.text = element_text(family = "sans",size = 9),
+        legend.position = c(-0.06,0.10),
+        legend.spacing = unit(0, "cm"))+
+  guides(color= guide_legend(title = "Prison Percentile"), size=guide_legend(title = "Prison Percentile"))
 
 ggsave(filename = "www/wildfire_map.png")
 
@@ -301,11 +308,17 @@ pm25_map <- usmap_transform(data = p2, input_names = c("long", "lat"))
 
 plot_usmap(color = "#b3b3b3") +
   geom_point(data = pm25_map, aes(x = x, y = y, size = pm25_pct, color = pm25_pct),
-             alpha = 0.75) +
+             alpha = 0.7) +
   scale_colour_gradient(low = "#b8ccb8", high = "#076904")+
-  scale_radius(range = c(1, 5))+
-  theme(plot.margin = margin(0,0,0,0,"cm"),
-        legend.position = "none")
+  scale_radius(range = c(0.2, 6))+
+  theme(plot.margin = margin(1,1,1,1,"cm"),
+        legend.margin = margin(0,0,0,0,"cm"),
+        legend.key.size = unit(0.5, "cm"),
+        legend.title = element_text(family = "sans", face = "bold",size = 12),
+        legend.text = element_text(family = "sans",size = 9),
+        legend.position = c(-0.06,0.10),
+        legend.spacing = unit(0, "cm"))+
+  guides(color= guide_legend(title = "Prison Percentile"), size=guide_legend(title = "Prison Percentile"))
 
 ggsave(filename = "www/pm25_map.png")
 

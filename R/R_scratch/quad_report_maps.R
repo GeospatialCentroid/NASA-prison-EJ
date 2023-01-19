@@ -33,14 +33,14 @@ plot_usmap(color = "#b3b3b3") +
   geom_point(data = plant_map, aes(x = x, y = y, size = pcntl, color = pcntl),
              alpha = 0.75) +
   scale_colour_gradient(low = "#bfcbd6", high = "#01294a")+
-  #scale_radius(range = c(1.5, 8))+
-  theme(plot.margin = margin(0,0,0,0,"cm"),
+  scale_radius(range = c(1, 6))+
+  theme(plot.margin = margin(1,1,1,1,"cm"),
         legend.margin = margin(0,0,0,0,"cm"),
         legend.key.size = unit(0.5, "cm"),
         legend.title = element_text(family = "sans", face = "bold",size = 12),
         legend.text = element_text(family = "sans",size = 9),
-        legend.position = c(0.02,0.15),
+        legend.position = c(-0.06,0.10),
         legend.spacing = unit(0, "cm"))+
-  guides(color= guide_legend(title = "Percentile"), size=guide_legend(title = "Percentile"))
+  guides(color= guide_legend(title = "Prison Percentile"), size=guide_legend(title = "Prison Percentile"))
 
 ggsave(filename = "www/power_plant_map.png")
