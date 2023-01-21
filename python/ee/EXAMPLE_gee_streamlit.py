@@ -5,6 +5,7 @@ Created on Mon May  2 13:17:59 2022
 @author: ccmothes
 """
 
+import gcloud
 import streamlit as st
 import geemap
 import ee
@@ -90,8 +91,8 @@ d1 = st.sidebar.date_input(
     max_value=today)
 
 
-#st.write(d1.strftime("%Y-%m-%d"))
-#st.write(d1)
+st.write(d1.strftime("%Y-%m-%d"))
+st.write(d1)
 
 #create date function to get image closest to chosen date
 def date_fun(image):
@@ -140,7 +141,8 @@ if spacecraft == 'Sentinel-2A':
         vizParams = {
         'bands': ['B4', 'B3', 'B2'],
         'min': 0,
-        'max': 0.3}
+        'max': 0.3
+        }
         Map.addLayer(maskS2clouds(plotImage), vizParams, viz)
     elif viz == 'Wildfire Damage':
         vizParams = {
@@ -185,8 +187,17 @@ else:
         Map.addLayer(plotImage2, vizParams, viz)
    
 
-#Map.addLayer(plotImage, vizTC, 'True Color')
-#Map.addLayer(collection, vizSnow, "Snow Probability")
+vizTC2 = {
+        'bands': ['SR_B4', 'SR_B3', 'SR_B2'],
+        'min': 0,
+        'max': 0.3
+}
+
+MapTC = Map
+MapTC.addLayer(plotImage, vizTC2, 'True Color')
+#MapSnow = Map.addLayer(collection, vizSnow2, "Snow Probability")
 #Map.addLayer(collection, vizFire, "Wildfire")
 
+MapTC.to_streamlit(height=1000)
 Map.to_streamlit(height=1000)
+
