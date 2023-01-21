@@ -1,0 +1,23 @@
+# code to process raw prison boundary data to study sites
+
+library(sf)
+library(tidyverse)
+
+
+prisons <- read_sf("data/raw/Prison_Boundaries.shp") %>% 
+  #filter out just state and federal
+  filter(TYPE %in% c("STATE", "FEDERAL")) %>% 
+  #filter just U.S. (not territories)
+  filter(COUNTRY == "USA") %>% 
+  # filter out prisons with 0 or NA population and that are designated as "closed"
+  filter(POPULATION > 0) %>% filter(STATUS == "OPEN")
+
+
+write_sf(prisons, 'data/processed/study_prisons.shp')
+
+
+#FYI looks like there are some prisons w/ dup names, so use facility IDs
+prisons %>% 
+  group_by(NAME) %>% 
+  summarize(n = n()) %>% 
+  filter(n > 1)
