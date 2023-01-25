@@ -1,13 +1,10 @@
-# Power Plants in United States ----
-
-## INITIALIZE ----
+# Read in and process all point-data datasets
 
 library(tidyverse)
 library(sf)
 library(furrr) #Parallel iterations for NPL geocoding
 
 source("R/R_scratch/buffer_calculation.R")
-source("R/R_scratch/power_weight_calculation.R")
 
 # Read in prison locations
 prisons <- st_read("data/raw/Prison_Boundaries.shp") %>% 
@@ -20,7 +17,7 @@ prisons <- st_read("data/raw/Prison_Boundaries.shp") %>%
   # filter out prisons with 0 or NA population and that are designated as "closed"
   filter(POPULATION > 0) %>% filter(STATUS == "OPEN")
 
-## POWER PLANTS ---------------------------------------------------
+# POWER PLANTS ---------------------------------------------------
 
 # Studying the type and proximity of power plants
 

@@ -51,6 +51,6 @@ npl_arc_sf <- npl_arc_df %>%
 st_write(npl_arc_sf, "data/processed/npl_addresses_geocoded_arc_sf.csv")
 
 ## RUN BUFFER AND SITE WEIGHT
-npl_prison_buffs <- buffer_calculation(npl_arc_sf, "national_priority_sites")
+npl_prison_buffs <- buffer_calculation(npl_arc_sf, "npl_superfund")
 
-npl_weight_score <- NPL_weight_calculation(npl_arc_sf)
+npl_weight_score <- npl_weight_calculation(npl_arc_sf)
