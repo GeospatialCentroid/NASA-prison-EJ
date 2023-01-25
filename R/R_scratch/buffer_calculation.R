@@ -3,7 +3,7 @@
 # Outputs a summarized list of FID and FACILITYID with a count of input_points, and facility point feature data
 
 #                       point dataset [sf], factor name for column naming [text]
-BufferCalculation <- function(input_points, factor_name) {
+buffer_calculation <- function(input_points, factor_name) {
   
   
   # Create temporary df to protect prisons

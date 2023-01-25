@@ -4,7 +4,7 @@ library(tidyverse)
 library(sf)
 library(furrr) #Parallel iterations for NPL geocoding
 
-source("R/R_scratch/BufferCalculations.R")
+source("R/R_scratch/buffer_calculation.R")
 
 # Read in prison locations
 prisons <- st_read("data/raw/Prison_Boundaries.shp") %>% 
@@ -44,7 +44,7 @@ prisons_power1km <- prisons %>%
 power_prison1km <- us_power_sp[prisons_power1km$plants_1km,]
 
 # Running Buffer Function, creates similar output to power_prison_1km
-power_prison_buffs <- BufferCalculation(us_power_sp, "power_plants")
+power_prison_buffs <- buffer_calculation(us_power_sp, "power_plants")
 
 # NPL SITES ---------------------------
 
@@ -87,5 +87,5 @@ npl_geo_arc <- npl_geo_arc %>%
 
 write.csv(npl_geo_arc, "data/processed/npl_addresses_geocoded_arc.csv")
 
-npl_prison_buffs <- BufferCalculation(npl_geo_arc, "national_priority_sites")
+npl_prison_buffs <- buffer_calculation(npl_geo_arc, "national_priority_sites")
 
