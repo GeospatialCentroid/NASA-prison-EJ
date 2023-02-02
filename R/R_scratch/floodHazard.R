@@ -61,7 +61,7 @@ test2 <- floodHazCO %>%
 # read in prison boundaries
 # buffer
 # each one, extract bbox, read in fema data
-# intersect floodpRisk layer w/ prinson boundary + prison boundary buffer
+# intersect floodRisk layer w/ prinson boundary + prison boundary buffer
 # calculate area
 # calculate percent covering prison boundary
 
@@ -131,7 +131,7 @@ for (i in 1:length(prisonID)) {
     df[i, "flood_risk_area_m2"] <- 0
     df[i, "flood_risk_percent"] <- 0
   } else {
-    ## filter to zones that hve A or V in them - high-risk flood zones/1% flood prob https://floodpartners.com/flood-zones/
+    ## filter to zones that have A or V in them - high-risk flood zones/1% flood prob https://floodpartners.com/flood-zones/
     floodRisk <- floodHaz %>%
       filter(stringr::str_detect(FLD_ZONE, 'A|V') &
                FLD_ZONE != "AREA NOT INCLUDED") #not sure if 'area not included' is in fema raw data
