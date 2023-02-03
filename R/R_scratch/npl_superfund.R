@@ -61,13 +61,14 @@ write.csv(npl_super_address_df, "data/processed/arcpro_to_geocode.csv")
 
 npl_arcpro_df <- read.csv("data/processed/npl_super_arcpro_geocoded.csv", check.names=FALSE, row.names = 1)
 
+
 # Clean and convert geometry to simple feature
 npl_arcpro_sf <- npl_arcpro_df %>% 
   filter(!is.na(latitude) & !is.na(longitude)) %>% 
   st_as_sf(coords = c("longitude", "latitude"), crs = 4326) %>% 
   select(!1)
 
-st_write(npl_arcpro_sf, "data/processed/npl_super_geocoded_arcpro_sf.csv")
+st_write(npl_arcpro_sf, "data/processed/npl_super_geocoded_arcpro_sf.csv", append = FALSE)
 
 ## RUN BUFFER AND SITE WEIGHT
 npl_prison_buffs <- buffer_calculation(npl_arcpro_sf, "npl_superfund_sites")

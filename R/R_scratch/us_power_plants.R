@@ -38,6 +38,7 @@ us_power_sf <- us_power %>%
   st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
 
 # Running Buffer Function, Apply weight based upon plant fuel type
+
 power_prison_buffs <- buffer_calculation(us_power_sf, "power_plants")
 
 power_prison_weight <- power_weight_calculation(us_power_sf)
