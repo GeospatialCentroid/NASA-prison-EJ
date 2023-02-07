@@ -25,6 +25,7 @@ prisons %>%
 
 # create prison centroid point dataset and save as .csv
 prisons %>% 
+  st_transform(crs = 4326) %>% 
   st_centroid() %>% 
   mutate(long = unlist(map(.$geometry,1)),
          lat = unlist(map(.$geometry,2))) %>%
