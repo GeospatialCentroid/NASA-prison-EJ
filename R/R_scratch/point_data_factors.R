@@ -2,6 +2,7 @@
 
 library(tidyverse)
 library(sf)
+library(furrr) #Parallel iterations for NPL geocoding
 
 source("R/R_scratch/BufferCalculations.R")
 
@@ -44,4 +45,47 @@ power_prison1km <- us_power_sp[prisons_power1km$plants_1km,]
 
 # Running Buffer Function, creates similar output to power_prison_1km
 power_prison_buffs <- BufferCalculation(us_power_sp, "power_plants")
+
+# NPL SITES ---------------------------
+
+# Read in NPL dataset
+npl <- readr::read_csv("data/raw/npl_sites.csv", skip = 13) %>% 
+  janitor::clean_names() %>% 
+  mutate(zip_code = str_sub(zip_code, 2, 6))
+
+# Experiment with geocoding, as many NA's produced
+## Parallelize with 8 CPU cores
+plan("multisession", workers = 8)
+
+## Arcgis
+npl_geo_address_df <- npl %>% 
+  unite(full_address, c("street_address", "city", "state"), sep = ", ") %>%
+  unite(full_address, c("full_address", "zip_code"), sep = " ") %>% 
+  filter(!(epa_id  %in% c("AZD094524097", "MOD981507585"))) # remove rows with weird characters
+
+# Prep address list to geocode using ArcGIS Method
+npl_geo_address <- as.list(npl_geo_address_df$full_address)
+
+# Furrr-powered geocoding call
+npl_geo_arc <- future_map(.x = npl_geo_address,
+                          ~ tidygeocoder::geo(address = .x, method = 'arcgis', lat = latitude , long = longitude, limit = 1)) %>% 
+  bind_rows()
+
+
+# Renaming and cleaning
+npl_geo_arc <- npl_geo_arc %>% 
+  rename("full_address" = "address")
+
+npl_geo_arc_df <- npl_geo_address_df %>% 
+  left_join(., npl_geo_arc, by = "full_address")
+
+
+# remove NAs and set CRS ArcGIS
+npl_geo_arc <- npl_geo_arc %>% 
+  filter(!is.na(latitude) & !is.na(longitude)) %>% 
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
+
+write.csv(npl_geo_arc, "data/processed/npl_addresses_geocoded_arc.csv")
+
+npl_prison_buffs <- BufferCalculation(npl_geo_arc, "national_priority_sites")
 

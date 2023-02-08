@@ -166,3 +166,58 @@ for (i in 1:length(prisonID)) {
 }
 
 
+# test pulling entire file for CONUS
+prisons_conus <- prisons %>% 
+  filter(!(STATE %in% c("HI", "AK")))
+
+
+## get bounding box
+bb <- st_bbox(prisons_conus)
+
+## extract bbox
+bb.ordered <-  paste(bb[1], bb[2], bb[3], bb[4], sep = "%2C")
+
+## construct URL
+url <-
+  paste0(
+    'https://hazards.fema.gov/gis/nfhl/rest/services/public/',
+    'NFHL/MapServer/',
+    28,
+    '/query?',
+    '&geometry=',
+    bb.ordered,
+    '&geometryType=esriGeometryEnvelope',
+    '&outFields=*',
+    '&returnGeometry=true',
+    '&returnZ=false',
+    '&returnM=false',
+    '&returnExtentOnly=false',
+    '&f=geoJSON'
+    
+  )
+
+
+## read in floodplain
+floodConus <- sf::read_sf(url)
+# still doesn't work..
+
+url2 <- 
+  paste0(
+    'https://hazards.fema.gov/gis/nfhl/rest/services/public/',
+    'NFHL/MapServer/',
+    28,
+    '/query?',
+    '&geometry=',
+    '&geometryType=esriGeometryEnvelope',
+    '&outFields=*',
+    '&returnGeometry=true',
+    '&returnZ=false',
+    '&returnM=false',
+    '&returnExtentOnly=false',
+    '&f=geoJSON'
+    
+  )
+
+floodRiskAll <- sf::read_sf(url2)  
+
+
