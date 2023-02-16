@@ -1,7 +1,7 @@
-#' Import park boundary shapefile
+#' Calculate flood risk
 #' 
-#' This function uses the Data Store REST Api to download national park boundary 
-#' shapefiles.
+#' This function calls flood zone data from the FEMA ArcGIS map services and calculates the
+#' percent of each prison boundary + buffer is covered by high risk flood zones (zones A | Z)
 #' 
 #' @param prisons An sf object of all prison polygons to be assessed
 #' @param dist The buffer distance (in meters) to add around prison boundaries
@@ -9,7 +9,7 @@
 #' @param path If `save = TRUE`, the file path to save the dataframe.
 #' 
 #' @return A tibble with total area and percent area flood risk zones cover the buffered prison boundary
-getFloodRisk <- function(prisons, dist = 5000, save = TRUE, path = 'data/processed'){
+getFloodRisk <- function(prisons, dist = 1000, save = TRUE, path = 'data/processed'){
 
   #check that crs is WGS 84 and if not transform it
   if (st_crs(prisons) != st_crs(4326)) {

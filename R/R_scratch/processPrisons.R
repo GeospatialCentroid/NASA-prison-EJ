@@ -21,3 +21,14 @@ prisons %>%
   group_by(NAME) %>% 
   summarize(n = n()) %>% 
   filter(n > 1)
+
+
+# create prison centroid point dataset and save as .csv
+prisons %>% 
+  st_transform(crs = 4326) %>% 
+  st_centroid() %>% 
+  mutate(long = unlist(map(.$geometry,1)),
+         lat = unlist(map(.$geometry,2))) %>%
+  st_drop_geometry() %>% 
+  select(FACILITYID, NAME, long, lat) %>% 
+  write_csv("data/processed/prison_centroids.csv")
