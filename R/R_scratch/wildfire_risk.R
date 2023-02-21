@@ -1,11 +1,14 @@
-# Wildfire Risk across the United States ----
+# Wildfire Risk from prison polygons ----
 # File Created: Jan 30, 2023, Devin Hunt
 
 ## INITIALIZE ----
 
-library(tidyverse)
-library(arcpullr)
-
+library(tidyr)
+library(dplyr)
+library(terra)
+library(stars)
+library(sf)
+library(leaflet)
 
 # source("R/R_scratch/" raster calculation)
 
@@ -19,26 +22,148 @@ library(arcpullr)
 #   -Repeat until finished
 # }
 
+## IMPORT LOCAL DATA ----
 
-## arcpullr package version wasn't pulling image server
 
-## IMPORT DATA ----
+### Prisons point data ----
 prisons <- read_sf('data/processed/study_prisons.shp') %>% 
-  #transform to 4WGS84 to match floodplains
   st_transform(crs = 4326)
 
 #get unique facility IDs, apply 1km buffer
-prison_unique <- prisons %>% 
-  distinct(FACILITYID, .keep_all = TRUE) %>% 
-  mutate(buffer = st_buffer(., 1000))
+prisons_unique <- prisons %>% 
+  st_buffer(1000)
 
-# Slice for testing (speeding up iteration process)
-prison_unique_test <- prisons %>% 
-  slice_head(., n = 100)
+### Wildfire Risk Raster (L:Drive) ----
+
+wf_conus <- rast("L:/Projects_active/EnviroScreen/data/wildfire/Data/whp2020_GeoTIF/whp2020_cnt_conus.tif")
+
+wf_ak <- rast("L:/Projects_active/EnviroScreen/data/wildfire/Data/whp2020_GeoTIF/whp2020_cnt_ak.tif") 
+
+wf_hi <- rast("L:/Projects_active/EnviroScreen/data/wildfire/Data/whp2020_GeoTIF/whp2020_cnt_hi.tif")
+
+#need to separate prisons file for conus, ak and hi
+
+prisons_conus <- prisons_unique %>% filter(!(STATE %in% c("AK", "HI")))
+prisons_ak <- prisons_unique %>% filter(STATE == "AK")
+prisons_hi <- prisons_unique %>% filter(STATE == "HI")
+
+# Devin's Example Workflow
+## Following https://luisdva.github.io/rstats/GIS-with-R/
+
+# Convert rasters into the proper coordinate referance system, WGS1984
+wf_conus_84 <- project(wf_conus, prisons_conus)
+wf_ak_84 <- project(wf_ak, prisons_ak)
+# Convert from "Hawaii_Albers_Equal_Area_Conic_USGS"
+wf_hi_84 <- project(wf_hi, prisons_hi)
+
+# Use mutate to calculate average wildfire risk value
+## Custom raster_extract from https://github.com/michaeldorman/geobgu, which allows for stars, sf objects in calculation
+
+# Blazing fast with dplyr
+prisons_conus_wf <- prisons_conus %>% 
+  mutate(wildfire_risk = terra::extract(wf_conus_84, prisons_conus, fun = mean, na.rm = TRUE)) %>% 
+  unnest(cols = wildfire_risk) %>% 
+  rename("wildfire_risk" = "whp2020_cnt_conus")
+
+prisons_ak_wf <- prisons_ak %>% 
+  mutate(wildfire_risk = terra::extract(wf_ak_84, prisons_ak, fun = mean, na.rm = TRUE)) %>% 
+  unnest(cols = wildfire_risk) %>% 
+  rename("wildfire_risk" = "whp2020_cnt_ak")
+
+prisons_hi_wf <- prisons_hi %>% 
+  mutate(wildfire_risk = terra::extract(wf_hi_84, prisons_hi, fun = mean, na.rm = TRUE)) %>% 
+  unnest(cols = wildfire_risk) %>% 
+  rename("wildfire_risk" = "whp2020_cnt_hi")
+
+
+# Resultant wildfire calculation dataset
+prisons_all_wf <- bind_rows(prisons_conus_wf, prisons_ak_wf, prisons_hi_wf) %>% 
+  select(!ID)
+
+st_write(prisons_all_wf, "data/processed/wildfire_risk_prisons.shp")
+  
+# Visualizing the data
+prisons <- prisons_all_wf %>% 
+  st_centroid()
+
+pal1 <- colorNumeric(palette = "Reds", domain = prisons$wildfire_risk)
+
+leaflet() %>% 
+  addTiles() %>% 
+  addCircleMarkers(data = prisons,
+                   color = ~pal1(wildfire_risk),
+                   radius = 5,
+                   stroke = FALSE, fillOpacity = 1)
 
 
 
-## RUN CALCULATIONS ----
+
+### SCRATCH Test Iteration ----
+for (facility in 1:length(prison_unique_test)) {
+  
+  
+  ## get bounding box
+  bb <- st_bbox(prison_unique_test[facility,])
+  
+  ## extract bbox
+  bb.ordered <-  paste(bb[1], bb[2], bb[3], bb[4], sep = "%2C")
+  
+  
+  url_paste0 <- paste0(
+    'https://apps.fs.usda.gov/fsgisx01/rest/services/RDW_Wildfire/RMRS_WRC_WildfireHazardPotential/ImageServer/',
+    '/query?',
+    '&geometry=',
+    bb.ordered,
+    '&geometryType=esriGeometryEnvelope',
+    '&outFields=*',
+    '&returnGeometry=true',
+    '&returnZ=false',
+    '&returnM=false',
+    '&returnExtentOnly=false',
+    '&f=geoJSON'
+  )
+  
+  
+  
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 # Fort Collins Test --------
 

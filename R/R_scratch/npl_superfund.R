@@ -30,32 +30,36 @@ npl_super_address_df <- npl_super %>%
   unite(full_address, c("full_address", "zip_code"), sep = " ") 
   
 
+## Furrr-powered geocoding call ----
+npl_super_geo_arc <- furrr::future_map(.x = npl_super_address_list,
+                          ~ tidygeocoder::geo(address = .x, method = 'arcgis', lat = latitude , long = longitude, limit = 1)) %>%
+  bind_rows()
+
+
+
+# Renaming for join
+npl_geo_arc <- npl_geo_arc %>%
+  rename("full_address" = "address")
+
+# Join geocoded geometry to original dataframe, remove duplicates
+npl_arc_df <- npl_geo_address_df %>%
+  left_join(., npl_geo_arc, by = "full_address") %>%
+  filter(!duplicated(.))
+
+# remove NAs and set CRS to WGS 84, convert to sf_object
+npl_arc_sf <- npl_arc_df %>%
+  filter(!is.na(latitude) & !is.na(longitude)) %>%
+  st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
+
+# Save geocoded simple features
+st_write(npl_arc_sf, "data/processed/npl_addresses_geocoded_arc_sf.csv")
+
+
 # Prep address list to geocode using ArcGIS Pro Geocoder
 npl_super_address_list <- as.list(npl_super_address_df$full_address)
 
 write.csv(npl_super_address_df, "data/processed/arcpro_to_geocode.csv")
 
-# ## Furrr-powered geocoding call ----
-# npl_super_geo_arc <- future_map(.x = npl_super_address_list,
-#                           ~ tidygeocoder::geo(address = .x, method = 'arcgis', lat = latitude , long = longitude, limit = 1)) %>% 
-#   bind_rows()
-# 
-# # Renaming for join
-# npl_geo_arc <- npl_geo_arc %>% 
-#   rename("full_address" = "address")
-# 
-# # Join geocoded geometry to original dataframe, remove duplicates
-# npl_arc_df <- npl_geo_address_df %>% 
-#   left_join(., npl_geo_arc, by = "full_address") %>% 
-#   filter(!duplicated(.))
-# 
-# # remove NAs and set CRS to WGS 84, convert to sf_object
-# npl_arc_sf <- npl_arc_df %>% 
-#   filter(!is.na(latitude) & !is.na(longitude)) %>% 
-#   st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
-# 
-# # Save geocoded simple features
-# st_write(npl_arc_sf, "data/processed/npl_addresses_geocoded_arc_sf.csv")
 
 ## IMPORT ARCGIS PRO GEOCODING ----
 

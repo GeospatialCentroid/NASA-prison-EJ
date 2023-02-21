@@ -3,7 +3,7 @@
 # Environmental Weight Calculation is used as a multiplier with the buffer_calculation function
 # Values from: ??
 
-power_weight_calculation <- function(dataset){
+calcPowerPlant <- function(dataset){
   # SITE TYPE
   dataset$site_type <- dataset %>% 
     mutate(dplyr::case_when(primary_fuel == "Gas" ~ ,
@@ -18,6 +18,4 @@ power_weight_calculation <- function(dataset){
                             primary_fuel == "Nuclear" ~ ,
                             primary_fuel == "Other" ~ ,
                             NA ~ 0))
-  
-  
 }

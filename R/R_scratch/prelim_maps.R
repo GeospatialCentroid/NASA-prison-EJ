@@ -72,7 +72,7 @@ leaflet() %>%
 # high temp exceeded the 90th percentile of historical daily temperatures, at the county level)
 
 
-heat_days <- read_csv("data/heat_days/data_181732.csv") %>% 
+heat_days <- read_csv("data/raw/heat_days/data_181732.csv") %>% 
   group_by(State, County, CountyFIPS) %>% 
   dplyr::summarise(heat_index = mean(Value))
 
