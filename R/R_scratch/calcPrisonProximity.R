@@ -24,7 +24,6 @@ calcPrisonProximity <- function(prison_sf, input_points_sf, buffer_distances_lis
                        .fns = ~length(.x),
                        .names = "{col}"))
   
-  
   # Return summary df
   return(prison_prox_sf)
 }

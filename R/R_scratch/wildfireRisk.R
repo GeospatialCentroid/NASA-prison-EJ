@@ -24,8 +24,7 @@ library(leaflet)
 
 ## IMPORT LOCAL DATA ----
 
-
-### Prisons point data ----
+### Prisons polygon data ----
 prisons <- read_sf('data/processed/study_prisons.shp') %>% 
   st_transform(crs = 4326)
 
@@ -47,8 +46,6 @@ prisons_conus <- prisons_unique %>% filter(!(STATE %in% c("AK", "HI")))
 prisons_ak <- prisons_unique %>% filter(STATE == "AK")
 prisons_hi <- prisons_unique %>% filter(STATE == "HI")
 
-# Devin's Example Workflow
-## Following https://luisdva.github.io/rstats/GIS-with-R/
 
 # Convert rasters into the proper coordinate referance system, WGS1984
 wf_conus_84 <- project(wf_conus, prisons_conus)
@@ -61,18 +58,21 @@ wf_hi_84 <- project(wf_hi, prisons_hi)
 
 # Blazing fast with dplyr
 prisons_conus_wf <- prisons_conus %>% 
-  mutate(wildfire_risk = terra::extract(wf_conus_84, prisons_conus, fun = mean, na.rm = TRUE)) %>% 
+  mutate(wildfire_risk = terra::extract(wf_conus_84, prisons_conus, fun = "mean", na.rm = TRUE)) %>% 
   unnest(cols = wildfire_risk) %>% 
+  select(!ID) %>% 
   rename("wildfire_risk" = "whp2020_cnt_conus")
 
 prisons_ak_wf <- prisons_ak %>% 
-  mutate(wildfire_risk = terra::extract(wf_ak_84, prisons_ak, fun = mean, na.rm = TRUE)) %>% 
+  mutate(wildfire_risk = terra::extract(wf_ak_84, prisons_ak, fun = "mean", na.rm = TRUE)) %>% 
   unnest(cols = wildfire_risk) %>% 
+  select(!ID) %>% 
   rename("wildfire_risk" = "whp2020_cnt_ak")
 
 prisons_hi_wf <- prisons_hi %>% 
-  mutate(wildfire_risk = terra::extract(wf_hi_84, prisons_hi, fun = mean, na.rm = TRUE)) %>% 
+  mutate(wildfire_risk = terra::extract(wf_hi_84, prisons_hi, fun = "mean", na.rm = TRUE)) %>% 
   unnest(cols = wildfire_risk) %>% 
+  select(!ID) %>% 
   rename("wildfire_risk" = "whp2020_cnt_hi")
 
 
@@ -126,35 +126,6 @@ for (facility in 1:length(prison_unique_test)) {
   
   
 }
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
