@@ -6,8 +6,8 @@ library(tidyverse)
 library(sf)
 library(furrr) #Parallel iterations for NPL geocoding
 
-source("R/R_scratch/buffer_calculation.R")
-source("R/R_scratch/power_weight_calculation.R")
+source("R/R_scratch/applyBuffers.R")
+source("R/R_scratch/calcPowerPlant.R")
 
 # Read in prison locations
 prisons <- st_read("data/raw/Prison_Boundaries.shp") %>% 
