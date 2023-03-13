@@ -11,7 +11,7 @@ import ee
 ee.Initialize()
 
 # import prisons
-prison_centroids = ee.FeatureCollection("projects/ee-ccmothes/assets/prison_centroids")
+#prison_centroids = ee.FeatureCollection("projects/ee-ccmothes/assets/prison_centroids")
 
 
 # define date range
@@ -55,7 +55,7 @@ modisdata = ee.ImageCollection('MODIS/061/MYD11A1') \
   .filter(ee.Filter.calendarRange(6, 8,'month'))
   
 
-modisdata.first()
+#modisdata.first()
   
 # Apply processing functions
 lst_day_processed = modisdata.map(toCelciusDay).map(applyQaMask)
@@ -67,21 +67,42 @@ lst_day_processed = modisdata.map(toCelciusDay).map(applyQaMask)
 # Now calculate average summer day temperature across date range
 summer_day_lst = lst_day_processed.select('LST_Day_1km').median()
                         
-print(summer_day_lst)
+#print(summer_day_lst)
 
 # Extract values at prison centroids
-sampled_points = summer_day_lst.sampleRegions(
-  collection=prison_centroids,
-  scale=1000,
-  geometries=True
-)                         
+#sampled_points = summer_day_lst.sampleRegions(
+#  collection=prison_centroids,
+#  scale=1000,
+#  geometries=True
+#)     
+
+# The sampleRegions method exceeds memory limits, use canopy cover method instead
+
+## Import eeFeatureCollection from assets
+prisons = ee.FeatureCollection("projects/ee-ccmothes/assets/study_prisons")
+
+# reduce over prison polygons
+
+## define function
+def lst_calc(feature):
+    lst = summer_day_lst.reduceRegion(
+              reducer=ee.Reducer.mean(),
+              geometry=feature.geometry(),
+              scale=1000
+    ) .set('FACILITYID',feature.get('FACILITYID'))
+    return ee.Feature(None,lst)
+
+
+prison_lst = prisons.map(lst_calc)
+                   
                                     
 
-# see what is exported
+# export to csv
 task = ee.batch.Export.table.toDrive(
-  collection = sampled_points,
-  description='sampled_points',
-  fileFormat='CSV'
+  collection = prison_lst,
+  description='prison_lst',
+  fileFormat='CSV',
+  selectors=['FACILITYID', 'LST_Day_1km']
 );
 
 task.start()

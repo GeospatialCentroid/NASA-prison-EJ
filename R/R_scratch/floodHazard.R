@@ -220,4 +220,11 @@ url2 <-
 
 floodRiskAll <- sf::read_sf(url2)  
 
+# read in from floodplain gdb --------------------------------------------
+
+# this still takes a very long time....
+rgdal::ogrListLayers("data/raw/floodPlains/NFHL_Key_Layers.gdb")
+
+floodplains <- read_sf("data/raw/floodPlains/NFHL_Key_Layers.gdb", layer = "S_FLD_HAZ_AR")
+
 
