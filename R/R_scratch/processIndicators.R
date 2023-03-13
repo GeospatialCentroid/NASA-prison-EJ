@@ -4,15 +4,22 @@ library(tidyverse)
 library(sf)
 library(terra)
 
-
+#source all processing functions
+lapply(list.files(
+  path = "R/src/",
+  pattern = ".R",
+  full.names = TRUE
+),
+source)
 
 # read in processed prison polygons
 prisons <- read_sf("data/processed/study_prisons.shp")
 
 
-source("R/src/getFloodRisk.R")
-
-
+# flood risk
 floodRisk <- getFloodRisk(prisons = prisons)
 
+
+#wildfire risk
+wildfireRisk <- getWildfireRisk(prisons = prisons)
 
