@@ -11,7 +11,7 @@ import ee
 ee.Initialize()
 
 # Import nlcd dataset
-dataset = dataset = ee.ImageCollection('USGS/NLCD_RELEASES/2016_REL')
+dataset = ee.ImageCollection('USGS/NLCD_RELEASES/2016_REL')
 
 
 # filter NLCD to 2016 CONUS, AK and HI
