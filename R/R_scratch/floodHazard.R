@@ -165,3 +165,69 @@ for (i in 1:length(prisonID)) {
   
 }
 
+<<<<<<< HEAD
+=======
+
+# test pulling entire file for CONUS
+prisons_conus <- prisons %>% 
+  filter(!(STATE %in% c("HI", "AK")))
+
+
+## get bounding box
+bb <- st_bbox(prisons_conus)
+
+## extract bbox
+bb.ordered <-  paste(bb[1], bb[2], bb[3], bb[4], sep = "%2C")
+
+## construct URL
+url <-
+  paste0(
+    'https://hazards.fema.gov/gis/nfhl/rest/services/public/',
+    'NFHL/MapServer/',
+    28,
+    '/query?',
+    '&geometry=',
+    bb.ordered,
+    '&geometryType=esriGeometryEnvelope',
+    '&outFields=*',
+    '&returnGeometry=true',
+    '&returnZ=false',
+    '&returnM=false',
+    '&returnExtentOnly=false',
+    '&f=geoJSON'
+    
+  )
+
+
+## read in floodplain
+floodConus <- sf::read_sf(url)
+# still doesn't work..
+
+url2 <- 
+  paste0(
+    'https://hazards.fema.gov/gis/nfhl/rest/services/public/',
+    'NFHL/MapServer/',
+    28,
+    '/query?',
+    '&geometry=',
+    '&geometryType=esriGeometryEnvelope',
+    '&outFields=*',
+    '&returnGeometry=true',
+    '&returnZ=false',
+    '&returnM=false',
+    '&returnExtentOnly=false',
+    '&f=geoJSON'
+    
+  )
+
+floodRiskAll <- sf::read_sf(url2)  
+
+# read in from floodplain gdb --------------------------------------------
+
+# this still takes a very long time....
+rgdal::ogrListLayers("data/raw/floodPlains/NFHL_Key_Layers.gdb")
+
+floodplains <- read_sf("data/raw/floodPlains/NFHL_Key_Layers.gdb", layer = "S_FLD_HAZ_AR")
+
+
+>>>>>>> 6047734449f665ad2c727f84089cfb2616016987

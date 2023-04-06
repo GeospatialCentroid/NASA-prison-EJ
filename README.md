@@ -39,6 +39,6 @@ This is the working repository for a NASA Equity and Environmental Justice proje
 
     -   `src/` Functions to calculate individual indicators
 
-    -   `R_scractch` Working R scripts / code outside of the main workflow
+    -   `R_scratch` Working R scripts / code outside of the main workflow
 
 -   `figs/` Figures produced from code
