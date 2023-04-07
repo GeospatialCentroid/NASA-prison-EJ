@@ -165,6 +165,8 @@ for (i in 1:length(prisonID)) {
   
 }
 
+<<<<<<< HEAD
+=======
 
 # test pulling entire file for CONUS
 prisons_conus <- prisons %>% 
@@ -228,3 +230,4 @@ rgdal::ogrListLayers("data/raw/floodPlains/NFHL_Key_Layers.gdb")
 floodplains <- read_sf("data/raw/floodPlains/NFHL_Key_Layers.gdb", layer = "S_FLD_HAZ_AR")
 
 
+>>>>>>> 6047734449f665ad2c727f84089cfb2616016987

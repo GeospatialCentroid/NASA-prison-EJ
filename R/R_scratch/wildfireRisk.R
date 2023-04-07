@@ -98,6 +98,8 @@ leaflet() %>%
 
 
 
+
+
 ### SCRATCH Test Iteration ----
 for (facility in 1:length(prison_unique_test)) {
   
@@ -122,8 +124,6 @@ for (facility in 1:length(prison_unique_test)) {
     '&returnExtentOnly=false',
     '&f=geoJSON'
   )
-  
-  
   
 }
 
