@@ -1,4 +1,4 @@
-# explore avg prison area/census tract to see if viable resolution
+# explore avg prison area/census tract or block group to see if viable resolution
 
 library(tidyverse)
 library(tigris)
@@ -12,6 +12,7 @@ tmap_mode("view")
 prisons <- read_sf("data/processed/study_prisons.shp")
 
 
+# Census Tracts --------------------
 
 # Read in census tracts
 tracts <- tigris::tracts(cb = TRUE)
@@ -54,5 +55,41 @@ prison_tracts <- prison_tracts %>%
 mean(prison_tracts$prison_area_km)
 # on average prisons are much smaller than 1km resolution, so for LST going to
 # just extract points.
+
+
+
+## Block groups -------------------------------
+
+# Read in block groups
+blocks <- tigris::block_groups(cb = TRUE)
+
+# add area column
+blocks <- blocks %>% 
+  mutate(block_area = st_area(.))
+
+
+
+# join prisons to their block groups
+prison_blocks <- prisons %>% 
+  st_transform(crs = st_crs(blocks)) %>% 
+  # add column for prison area
+  mutate(prisons_area = st_area(.)) %>% 
+  st_join(blocks)
+
+
+#now calculate % prison area covers census tract
+prison_block_coverage <- prison_blocks %>% 
+  group_by(FACILITYID) %>% 
+  summarise(coverage = (sum(prisons_area)/sum(block_area))*100) # use sum incase some prisons overlap multiple blocks?
+
+#explore coverage
+mean(prison_block_coverage$coverage)
+# 2.38
+
+hist(prison_block_coverage$coverage, breaks = 40)
+
+# vast majority only cover 2% or less of the census block
+
+
 
 
