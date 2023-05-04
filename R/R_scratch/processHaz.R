@@ -4,6 +4,7 @@ library(tidyverse)
 library(XML)
 library(xml2)
 library(vroom)
+library(sf)
 
 
 # import EPA FRS (facility register service) .xml that includes TSDFs and LQGs
@@ -62,11 +63,11 @@ frs_df <- tibble(
   crs = crs,
   programName = programName,
   interestType = interestType
-) # error because more program name and interest type than
+) # error because multiple program name and interest type per facility..
 
 
 
-# try reading in csv of all FRS sites
+# csv of all FRS sites -------------------------------------------------
 
 all_frs <- vroom("data/raw/national_single_EPA_FRS/NATIONAL_SINGLE.CSV")
 
@@ -78,12 +79,19 @@ haz_sites <- all_frs %>%
   filter(str_detect(INTEREST_TYPES, "LQG|TSD"))
   
 
+# save this file, inspect later and may use as final dataset
+write_csv(haz_sites, "data/raw/hazardous_waste/TSD_LQGs_raw.csv")
 
-# compare with TRI data
+# TRI data ---------------------------------------------------------------
 tri <- read_csv("data/raw/2021_us_toxic_release_inventory.csv")
 
 #only 5k haz sites in tri
 
 
-# look at tdsf data downloaded from EPA
+# tdsf data downloaded from EPA ------------------------------------------
 tsdf <- read_csv("data/raw/hazardous_waste/rcaInfo_TSDF.csv")
+
+
+
+# kmz data download (converted to shapefile in pro) --------------------
+frs_kmz <- read_sf("data/raw/hazardous_waste/EPA_FRS_kmz_export.shp")
