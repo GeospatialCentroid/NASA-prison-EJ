@@ -71,7 +71,7 @@ getWildfireRisk <- function(prisons, filePath = "L:/Projects_active/EnviroScreen
   
   if (save == TRUE){
     
-    write_csv(prisons_wf, file = paste0(writePath,"prisons_wildfire.csv"))
+    write_csv(prisons_wf, file = paste0(path,"/prisons_wildfire_", date, ".csv"))
   }
   
   
