@@ -61,8 +61,8 @@ frs_df <- tibble(
   lat = lat,
   long = long,
   crs = crs,
-  programName = programName,
-  interestType = interestType
+  # programName = programName,
+  # interestType = interestType
 ) # error because multiple program name and interest type per facility..
 
 
@@ -81,6 +81,20 @@ haz_sites <- all_frs %>%
 
 # save this file, inspect later and may use as final dataset
 write_csv(haz_sites, "data/raw/hazardous_waste/TSD_LQGs_raw.csv")
+
+
+## inspect this, does it seem like it captures all the haz sites?
+haz_sites <- read_csv("data/raw/hazardous_waste/TSD_LQGs_raw.csv")
+
+
+# see how many of these are within the FRS xml above
+haz_sites %>% filter(REGISTRY_ID %in% frs_df$registryID)
+# 39840, so almost all of them. Inspect the interest types for the ~2k missing
+
+haz_sites %>% filter(!REGISTRY_ID %in% frs_df$registryID) %>% pull(INTEREST_TYPES) %>% 
+  unique()
+# all still LQGs or TSDs, so let's use this data for the indicator calculation
+
 
 # TRI data ---------------------------------------------------------------
 tri <- read_csv("data/raw/2021_us_toxic_release_inventory.csv")
