@@ -43,5 +43,5 @@ save(state_traffic, file = "data/processed/traffic_proximity/state_traffic_list.
 
 aadt_2018 <- bind_rows(state_traffic)
 
-save(us_traffic, file = "data/processed/traffic_proximity/aadt_2018.RData")
+save(aadt_2018, file = "data/processed/traffic_proximity/aadt_2018.RData")
 
