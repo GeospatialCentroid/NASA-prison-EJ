@@ -20,6 +20,10 @@ prisons <- read_sf("data/processed/study_prisons.shp")
 floodRisk <- getFloodRisk(prisons = prisons)
 
 
-#wildfire risk
+# wildfire risk
 wildfireRisk <- getWildfireRisk(prisons = prisons)
 
+
+# traffic proximity
+trafficProx <- getTrafficProximity(prisons = prisons, file = "data/processed/traffic_proximity/aadt_2018.RData",
+                                   save = TRUE, path = "data/processed/")

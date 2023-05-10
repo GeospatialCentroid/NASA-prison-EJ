@@ -15,11 +15,13 @@ getTrafficProximity <- function(prisons, file, dist = 500, save = FALSE, path = 
   
   load(file)
   
+  # set attribute constant argument to suppress sf warning w/ st_crop
+  st_agr(aadt_2018) = "constant"
   
   # make an empty list
-  traffic_scores <- vector("list", length = 4)
+  traffic_scores <- vector("list", length = nrow(prisons))
   
-  for (i in 1:4) {
+  for (i in 1:nrow(prisons)) {
     
     # if no 'major' roads within 500m
     if (nrow(st_crop(aadt_2018, st_buffer(prisons[i, ], 500))) == 0) {
