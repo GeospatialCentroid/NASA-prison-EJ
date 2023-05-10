@@ -53,8 +53,16 @@ getTrafficProximity <- function(prisons, file, dist = 500, save = FALSE, path = 
   
   
   # bind all prison traffic scores
-  trafficProx <- bind_rows(traffic_scores)
+  traffic_prox <- bind_rows(traffic_scores)
   
-  return(trafficProx)
+  
+  if(save == TRUE) {
+    
+    write_csv(traffic_prox, file = paste0(path, "/traffic_prox_", Sys.Date(), ".csv"))
+    
+  }
+  
+  
+  return(traffic_prox)
   
 }

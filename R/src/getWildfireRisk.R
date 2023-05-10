@@ -8,12 +8,11 @@
 #' @param dist The buffer distance (in meters) to add around prison boundaries
 #' @param save Whether to save (TRUE) the resulting dataframe (as .csv) or not (FALSE)
 #' @param path If `save = TRUE`, the file path to the folder to save the output csv to.
-#' @param date A date tag to add to the file name to track versions. Default is current date
 #' 
 #' 
 #' @return A tibble with total area and percent area flood risk zones cover the buffered prison boundary
 getWildfireRisk <- function(prisons, filePath = "L:/Projects_active/EnviroScreen/data/wildfire/Data/whp2020_GeoTIF/", 
-                            dist = 1000, save = TRUE, path = 'data/processed/', date = Sys.Date()){
+                            dist = 1000, save = TRUE, path = 'data/processed/'){
   
   #buffer prison
   prison_buffer <- st_buffer(prisons, dist) %>% 
@@ -71,7 +70,7 @@ getWildfireRisk <- function(prisons, filePath = "L:/Projects_active/EnviroScreen
   
   if (save == TRUE){
     
-    write_csv(prisons_wf, file = paste0(path,"/prisons_wildfire_", date, ".csv"))
+    write_csv(prisons_wf, file = paste0(path,"/wildfire_risk_", Sys.Date(), ".csv"))
   }
   
   
