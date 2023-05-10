@@ -43,5 +43,11 @@ save(state_traffic, file = "data/processed/traffic_proximity/state_traffic_list.
 
 aadt_2018 <- bind_rows(state_traffic)
 
+
+# project to CRS of prisons for analysis
+prisons <- read_sf("data/processed/study_prisons.shp")
+
+aadt_2018 <- st_transform(aadt_2018, st_crs(prisons))
+
 save(aadt_2018, file = "data/processed/traffic_proximity/aadt_2018.RData")
 
