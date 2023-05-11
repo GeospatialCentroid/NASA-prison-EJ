@@ -7,19 +7,19 @@
 #' @param filePath the file path pointing to the folder with the 3 wildfire raster layers
 #' @param dist The buffer distance (in meters) to add around prison boundaries
 #' @param save Whether to save (TRUE) the resulting dataframe (as .csv) or not (FALSE)
-#' @param path If `save = TRUE`, the file path to the folder to save the output csv to.
+#' @param writePath If `save = TRUE`, the file path to the folder to save the output csv to.
 #' 
 #' 
 #' @return A tibble with total area and percent area flood risk zones cover the buffered prison boundary
 getWildfireRisk <- function(prisons, filePath = "L:/Projects_active/EnviroScreen/data/wildfire/Data/whp2020_GeoTIF/", 
-                            dist = 1000, save = TRUE, path = 'data/processed/'){
+                            dist = 1000, save = TRUE, writePath = 'data/processed/'){
   
-  #buffer prison
+  # buffer prison
   prison_buffer <- st_buffer(prisons, dist) %>% 
     st_make_valid()
   
   
-  #read in rasters from file
+  # read in rasters from file
   ### Wildfire Risk Raster (L:Drive) ----
   
   wf_conus <- rast(paste0(filePath, "whp2020_cnt_conus.tif"))
@@ -27,7 +27,7 @@ getWildfireRisk <- function(prisons, filePath = "L:/Projects_active/EnviroScreen
   wf_hi <- rast(paste0(filePath, "whp2020_cnt_hi.tif"))
   
   
-  #need to separate prisons file for conus, ak and hi and project to matching raster
+  # need to separate prisons file for conus, ak and hi and project to matching raster
   prisons_conus <- prison_buffer %>% filter(!(STATE %in% c("AK", "HI"))) %>% 
     st_transform(st_crs(wf_conus))
   
