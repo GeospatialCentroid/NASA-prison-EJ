@@ -13,12 +13,12 @@
 getWildfireRisk <- function(prisons, filePath = "L:/Projects_active/EnviroScreen/data/wildfire/Data/whp2020_GeoTIF/", 
                             dist = 1000, save = TRUE, writePath = 'data/processed/'){
   
-  #buffer prison
+  # buffer prison
   prison_buffer <- st_buffer(prisons, dist) %>% 
     st_make_valid()
   
   
-  #read in rasters from file
+  # read in rasters from file
   ### Wildfire Risk Raster (L:Drive) ----
   
   wf_conus <- rast(paste0(filePath, "whp2020_cnt_conus.tif"))
@@ -26,7 +26,7 @@ getWildfireRisk <- function(prisons, filePath = "L:/Projects_active/EnviroScreen
   wf_hi <- rast(paste0(filePath, "whp2020_cnt_hi.tif"))
   
   
-  #need to separate prisons file for conus, ak and hi and project to matching raster
+  # need to separate prisons file for conus, ak and hi and project to matching raster
   prisons_conus <- prison_buffer %>% filter(!(STATE %in% c("AK", "HI"))) %>% 
     st_transform(st_crs(wf_conus))
   
@@ -36,10 +36,8 @@ getWildfireRisk <- function(prisons, filePath = "L:/Projects_active/EnviroScreen
   prisons_hi <- prison_buffer %>% filter(STATE == "HI") %>% 
     st_transform(st_crs(wf_hi))
   
-
   
-  # create function to calculate average wf risk within each prison boundary
-  
+  # Calculates each wildfire risk value within its boundary
   wfRiskCalc <- function(prison_obj, raster_obj){
     
     df <- prison_obj %>% 
@@ -53,8 +51,7 @@ getWildfireRisk <- function(prisons, filePath = "L:/Projects_active/EnviroScreen
   }
   
   
-  
-  # Blazing fast with dplyr
+  # Calculate values with `WfRiskCalc()`
   prisons_conus_wf <- wfRiskCalc(prisons_conus, wf_conus)
   
   prisons_ak_wf <- wfRiskCalc(prisons_ak, wf_ak)
