@@ -1,6 +1,6 @@
 # map of study extent for NASA grant
 
-library(sf)
+library(sf)c
 library(dplyr)
 library(purrr)
 library(ggplot2)
@@ -20,7 +20,7 @@ prisons <- st_read("data/Prison_Boundaries.shp") %>%
   # filter out prisons with 0 or NA population and that are designated as "closed"
   filter(POPULATION > 0) %>% filter(STATUS == "OPEN") %>% 
   mutate(long = unlist(map(.$geometry,1)),
-         lat = unlist(map(.$geometry,2))) 
+         lat = unlist(map(.$geometry,2)))
 
 
 

@@ -1,20 +1,21 @@
-# Function to clean filter NASA SEDAC (PEST-CHEMGRIDS) for CalEnviroScreen4.0 Pesticides
-# SEDAC dataset: https://sedac.ciesin.columbia.edu/data/set/ferman-v1-pest-chemgrids-v1-01
-# CalEnviroScreen list: https://oehha.ca.gov/media/downloads/calenviroscreen/report/calenviroscreen40reportf2021.pdf [Pages 79 - 90]
+#' Calculate pesticide application quantities
+#' 
+#' This function uses ApplicationRate from SEDAC PEST-CHEMGRIDS rasters and calculates
+#' the average quantity of all harmful pesticides used within a buffer of the prison.
+#' 
+#' @param prisons An sf object of all prison polygons to be assessed
+#' @param filePath The file path pointing to the unzipped parent SEDAC folder ex.'/ferman-v1-pest-chemgrids-v1-01-geotiff'
+#' @param pestTable The .csv file of CalEnviroScreen pesticides created by `getEnviroPest()`
+#' @param dist The buffer distance (in meters) to add around prison boundaries
+#' @param save Whether to save (TRUE) the resulting dataframe (as .csv) or not (FALSE)
+#' @param writePath If `save = TRUE`, the file path to the folder to save the output csv to
+#' 
+#' @return The total average pesticide application from 2020 in kg/ha*yr
 
-# File Created: February 15, 2023
-
-library(tidyr)
-library(dplyr)
-library(tabulizer)
-library(terra)
-library(sf)
-library(leaflet)
-
-
-calcPesticides <- function(sedac_pesticide_parent){
+calcPesticides <- function(prisons, filePath = "data/raw/pesticide_sedac/ferman-v1-pest-chemgrids-v1-01-geotiff",
+                           pestTable = "data/processed/pesticide_list.csv", dist = 1000, save = TRUE, writePath = 'data/processed/'){
   # Read in SEDAC ApplicationRate .tif(s)
-  sedac_filenames <- list.files(path = paste0(sedac_pesticide_parent,"/ApplicationRate/GEOTIFF"), 
+  sedac_filenames <- list.files(path = paste0(filePath,"/ApplicationRate/GEOTIFF"), 
                                 pattern = "\\.tif$",
                                 full.names = TRUE,
                                 no.. = TRUE)
@@ -24,28 +25,9 @@ calcPesticides <- function(sedac_pesticide_parent){
                                pest_name = tolower(stringr::word(sedac_filenames, start = 4L, sep = "_")),
                                year = stringr::word(sedac_filenames, start = 5L, sep = "_"))
   
-  ## CaliEnviroScreen Pesticides ----
-  cal_pest <- extract_tables("data/raw/pesticide_sedac/CalEnviroScreen40_PESTICIDE_LIST.pdf")
-  cal_pest_all <- list()
-  
-  # Clean and stitch together pages of table
-  for (i in 1:length(cal_pest)) {
-    df_df <- data.frame(cal_pest[i])
-    df_cut <- df_df[-(1:3),]
-    
-    cal_pest_all[[i]] <- df_cut
-  }
-  
-  cal_pest <- cal_pest_all %>% 
-    bind_rows(.)
-  
-  # Clean extra blank spaces, rename variables
-  cal_pest_clean <- cal_pest %>% 
-    filter(if_all(.cols = everything(), ~ .x != "")) %>% 
-    rename_all(., ~c("pesticide_active_ingredient", "use_2017_19_lbs", "enviroscreen_rank"))
-  
-  # Final list of pesticides from CalEnviroScreen
-  cal_pest_list <- tolower(unique(cal_pest_clean$pesticide_active_ingredient))
+  # Read in converted PDF table
+  cal_pest_df <- read_csv(pestTable)
+  cal_pest_list <- cal_pest_df$cal_pest_list
   
   ## Filter matching pesticides ----
   pesticide_cal_sedac <- sedac_meta[which(grepl(paste0(cal_pest_list, collapse = '|'), sedac_meta$pest_name)),]
@@ -69,9 +51,9 @@ calcPesticides <- function(sedac_pesticide_parent){
     rast_H <- terra::rast(pesticide_cal_sedac_filenames$filename[index])
     rast_L <- terra::rast(pesticide_cal_sedac_filenames$filename[index + 1])
     
-    # Replace negative values with NA
-    rast_H[rast_H < 0] <- NA
-    rast_L[rast_L < 0] <- NA
+    # Replace negative values with zero
+    rast_H[rast_H < 0] <- 0
+    rast_L[rast_L < 0] <- 0
     
     # Create a corresponding filename for export
     stripped_filename <- stringr::word(pesticide_cal_sedac_filenames$filename[index], start = 3L, end = 5L, sep = "_")
@@ -99,41 +81,20 @@ calcPesticides <- function(sedac_pesticide_parent){
   pesticide_sum <- rast("data/processed/pesticide_sedac/pesticides_sedac_2020.tif")
   
   ### Calculate mean usage value for each prison polygon ----
-  
-  # Get unique facility IDs, apply 1km buffer
-  prisons <- read_sf('data/processed/study_prisons.shp') %>% 
-    st_transform(crs = 4326) %>% 
-    st_buffer(1000)
-  
   pesticide_sum_84 <- project(pesticide_sum, prisons)
   
   names(pesticide_sum_84) <- "pesticide_sum_kg_ha.year"
   
-  # Extract usage (kg/ha-year) using terra::extract()
+  # Extract usage (kg/ha*year) using terra::extract()
   prisons_pest <- prisons %>% 
     mutate(pesticide_use = terra::extract(pesticide_sum_84, prisons, fun = "mean", na.rm = TRUE)) %>% 
     unnest(cols = pesticide_use) %>% 
     select(!ID)
   
-  return(prisons_pest)
+  if (save == TRUE) {
+    
+    write_csv(prisons_pest, paste0(writePath, "prisons_pesticide.csv"))
+  }
+  
 }
-
-## TEST ----
-test_calcPesticides <- calcPesticides("data/raw/pesticide_sedac/ferman-v1-pest-chemgrids-v1-01-geotiff")
-
-### Visualize Results ----
-prisons <- prisons_pest %>% 
-  st_centroid(.)
-
-pal1 <- colorNumeric(palette = "Reds", domain = prisons$pesticide_sum_kg_ha.year)
-
-leaflet(prisons) %>% 
-  addTiles() %>% 
-  addCircleMarkers(color = ~pal1(pesticide_sum_kg_ha.year),
-              radius = 5,
-              stroke = FALSE, fillOpacity = 1) %>% 
-  addLegend(pal = pal1,
-            values = ~pesticide_sum_kg_ha.year,
-            title = "Pesticide Usage (kg/ha*year)")
-
 
