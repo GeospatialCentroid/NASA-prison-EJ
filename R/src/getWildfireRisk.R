@@ -9,6 +9,7 @@
 #' @param save Whether to save (TRUE) the resulting dataframe (as .csv) or not (FALSE)
 #' @param writePath If `save = TRUE`, the file path to the folder to save the output csv to.
 #' 
+#' 
 #' @return A tibble with total area and percent area flood risk zones cover the buffered prison boundary
 getWildfireRisk <- function(prisons, filePath = "L:/Projects_active/EnviroScreen/data/wildfire/Data/whp2020_GeoTIF/", 
                             dist = 1000, save = TRUE, writePath = 'data/processed/'){
@@ -66,7 +67,7 @@ getWildfireRisk <- function(prisons, filePath = "L:/Projects_active/EnviroScreen
   
   if (save == TRUE){
     
-    write_csv(prisons_wf, file = paste0(writePath,"prisons_wildfire.csv"))
+    write_csv(prisons_wf, file = paste0(path,"/wildfire_risk_", Sys.Date(), ".csv"))
   }
   
   

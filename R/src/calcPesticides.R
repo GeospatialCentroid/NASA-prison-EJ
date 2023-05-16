@@ -89,11 +89,13 @@ calcPesticides <- function(prisons, filePath = "data/raw/pesticide_sedac/ferman-
   prisons_pest <- prisons %>% 
     mutate(pesticide_use = terra::extract(pesticide_sum_84, prisons, fun = "mean", na.rm = TRUE)) %>% 
     unnest(cols = pesticide_use) %>% 
-    select(!ID)
+    select(FACILITYID, pesticides = pesticide_sum_kg_ha.year) %>% 
+    st_drop_geometry()
   
   if (save == TRUE) {
     
-    write_csv(prisons_pest, paste0(writePath, "prisons_pesticide.csv"))
+    write_csv(prisons_pest, paste0(writePath, "/pesticides_", Sys.Date(), ".csv"))
+    
   }
   
 }

@@ -9,7 +9,7 @@
 #' @param path If `save = TRUE`, the file path to save the dataframe.
 #' 
 #' @return A tibble with total area and percent area flood risk zones cover the buffered prison boundary
-getFloodRisk <- function(prisons, dist = 1000, save = TRUE, path = 'data/processed'){
+getFloodRisk <- function(prisons, dist = 1000, save = TRUE, path = 'data/processed/'){
 
   #check that crs is WGS 84 and if not transform it
   if (st_crs(prisons) != st_crs(4326)) {
@@ -119,7 +119,7 @@ getFloodRisk <- function(prisons, dist = 1000, save = TRUE, path = 'data/process
   
   if (save == TRUE){
     
-    write_csv(df, file = paste0(path,"/floodRisk.csv"))
+    write_csv(df, file = paste0(path,"/flood_risk_", Sys.Date(), ".csv"))
   }
   
   
