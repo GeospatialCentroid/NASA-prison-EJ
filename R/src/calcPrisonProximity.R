@@ -65,8 +65,8 @@ calcPrisonProximity <- function(prisons, proxFeatures, factor, buffer,
   return(prisons)
 }
 
-prisons_t <- prisons %>% 
-  select(FACILITYID)
-
-# Test Call
-test_buffers <- calcPrisonProximity(prisons_t, us_power_sf, 'power', c(1000, 5000, 10000, 20000, 40000))
+# prisons_t <- prisons %>% 
+#   select(FACILITYID)
+# 
+# # Test Call
+# test_buffers <- calcPrisonProximity(prisons_t, us_power_sf, 'power', c(1000, 5000, 10000, 20000, 40000))

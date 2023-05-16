@@ -11,7 +11,7 @@
 #' @param path If `save = TRUE`, the file path to save the dataframe.
 #' 
 #' @return A tibble with total area and percent area flood risk zones cover the buffered prison boundary
-getOzone <- function(prisons, folder, dist = 5000, years = c(2000, 2016), save = FALSE, path = 'data/processed'){
+getPM25 <- function(prisons, folder, dist = 5000, years = c(2000, 2016), save = FALSE, path = 'data/processed'){
   
   #import and calculate avg annual ozone for specified year range
   
