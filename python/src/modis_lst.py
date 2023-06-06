@@ -37,7 +37,7 @@ def bitwiseExtract(input, fromBit, toBit):
 #Bits 0-1 <= 1 (LST produced of both good and other quality)
 #Bits 2-3 = 0 (Good data quality)
 #Bits 4-5 Ignore, any value is ok
-#Bits 6-7 = 0 (Average LST error ≤ 1K)
+#Bits 6-7 <= 1 (Average LST error ≤ 2K)
 def applyQaMask(image):
   lstDay = image.select('LST_Day_1km')
   qcDay = image.select('QC_Day')
@@ -57,9 +57,6 @@ modisdata = ee.ImageCollection('MODIS/061/MYD11A1') \
 
 #modisdata.first()
   
-# Apply processing functions
-lst_day_processed = modisdata.map(toCelciusDay).map(applyQaMask)
-                                    #.map(clipped);
                                     
 # Apply processing functions
 lst_day_processed = modisdata.map(toCelciusDay).map(applyQaMask)
@@ -76,7 +73,7 @@ summer_day_lst = lst_day_processed.select('LST_Day_1km').median()
 #  geometries=True
 #)     
 
-# The sampleRegions method exceeds memory limits, use canopy cover method instead
+# The sampleRegions method exceeds memory limits, use reduce method instead
 
 ## Import eeFeatureCollection from assets
 prisons = ee.FeatureCollection("projects/ee-ccmothes/assets/study_prisons")
