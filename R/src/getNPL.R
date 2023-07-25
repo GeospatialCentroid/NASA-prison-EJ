@@ -9,7 +9,7 @@
 #' @param save Whether to save the resulting dataframe (as .csv) or not.
 #' @param path If `save = TRUE`, the file path to save the dataframe.
 #' 
-#' @return A tibble with total area and percent area flood risk zones cover the buffered prison boundary
+#' @return A tibble with summed proximity values for each prison
 getNPL <- function(prisons, file = "data/processed/npl_addresses_geocoded_arc_sf.csv", 
                    dist = 5000, save = FALSE, path = NULL){
   
