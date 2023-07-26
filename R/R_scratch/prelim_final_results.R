@@ -1,6 +1,12 @@
 library(tidyverse)
 library(sf)
+
+# depending on R version, need older version of usmap
+require(devtools)
+install_version("usmap", version = "0.6.1", repos = "http://cran.us.r-project.org")
+
 library(usmap)
+
 
 
 # read in processed prison centroids
@@ -17,9 +23,30 @@ final_df <- read_csv("data/processed/final_df_2023-05-16.csv") %>%
   left_join(prisons, by = "FACILITYID")
 
 
+# data exploration ------------------------------------------------
+
+# convert final score to percentile
+final_df <- final_df %>% 
+  mutate(final_risk_pcnt = cume_dist(final_risk_score) * 100)
+
+# find top 20 and look at prison stats
+
+prisons_shp <- read_sf("data/processed/study_prisons.shp")
+
+
+top100 <- arrange(final_df, -final_risk_pcnt)[1:100,] %>% 
+  mutate(FACILITYID = as.character(FACILITYID)) %>%
+  left_join(prisons_shp, by = "FACILITYID")
+
+
+top100 %>% group_by(STATE) %>% count()
+# 22% in CA, 
+# CA, GA, MD and FL make up 60% of top 100 prisons with highest vulnerability score
+
+
 # map results
 
-prisons_map <- usmap_transform(data = final_df, input_names = c("long", "lat"))
+prisons_map <- usmap::usmap_transform(data = final_df, input_names = c("long", "lat"))
 
 
 # climate map
@@ -87,7 +114,7 @@ ggsave(filename = "figs/effects_component_prelim.png")
 
 # final risk score
 plot_usmap(color = "#b3b3b3", size = 0.35) +
-  geom_point(data = prisons_map, aes(x = x, y = y, size = final_risk_score, color = final_risk_score),
+  geom_point(data = prisons_map, aes(x = x, y = y, size = final_risk_pcnt, color = final_risk_pcnt),
              alpha = 0.5) +
   scale_colour_gradient(low = "lightgray", high = "black", limits = c(0,100))+
   scale_radius(range = c(0.1, 4), limits = c(0,100))+
@@ -102,12 +129,12 @@ plot_usmap(color = "#b3b3b3", size = 0.35) +
         plot.title = element_text(size = 16, family = "sans"))+
   guides(color= guide_legend(title = "Prison\nPercentile"), size=guide_legend(title = "Prison\nPercentile"))
 
-ggsave(filename = "figs/vulnerability_score_prelim.png")
+ggsave(filename = "figs/vulnerability_score_prelim_pcnt.png")
 
 
 # top 100 at risk prisons
 plot_usmap(color = "#b3b3b3", size = 0.35) +
-  geom_point(data = arrange(prisons_map, desc(final_risk_score))[1:100,], aes(x = x, y = y),
+  geom_point(data = arrange(prisons_map, desc(final_risk_pcnt))[1:10,], aes(x = x, y = y),
              alpha = 0.6, size = 3, color = "red") +
   #scale_colour_gradient(low = "#b5f5c0", high = "#05871c")+
   #scale_radius(range = c(0.1, 4))+
