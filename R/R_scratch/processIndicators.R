@@ -79,13 +79,16 @@ climate_scores <- list(floodRisk, wildfireRisk, heatRisk, canopyCover) %>%
   #make facility ID character
   mutate(FACILITYID = as.character(FACILITYID)) %>% 
   #calculate percentile columns for each raw indicator
-  dplyr::mutate(across(
+  mutate(across(
     where(is.numeric),
     .fns = list(pcntl = ~ cume_dist(.) * 100),
     .names = "{col}_{fn}"
   )) %>%
+  # need to inverse canopy cover since high value is good
+  mutate(percent_tree_cover_pcntl = cume_dist(desc(percent_tree_cover))*100) %>% 
+  rowwise() %>% 
   # calculate climate component score (average all indicator percentile values per prison
-  mutate(climateScore = rowMeans(select(., contains("pcntl")), na.rm = TRUE))
+  mutate(climate_score = gm_mean(c_across(contains("pcntl"))))
 
 
 # env exposures scores
@@ -108,8 +111,9 @@ exposure_scores <- list(ozone, pm25, pesticides, traffic) %>%
     .fns = list(pcntl = ~ cume_dist(.) * 100),
     .names = "{col}_{fn}"
   )) %>%
-  # calculate climate component score (average all indicator percentile values per prison
-  mutate(exposureScore = rowMeans(select(., contains("pcntl")), na.rm = TRUE))
+  rowwise() %>% 
+  # calculate climate component score (geometric mean of indicator percentiles)
+  mutate(exposure_score = gm_mean(c_across(contains("pcntl"))))
 
 
 
@@ -133,8 +137,9 @@ effects_scores <- list(npl, rmp, haz) %>%
     .fns = list(pcntl = ~ cume_dist(.) * 100),
     .names = "{col}_{fn}"
   )) %>%
+  rowwise() %>% 
   # calculate climate component score (average all indicator percentile values per prison
-  mutate(effectsScore = rowMeans(select(., contains("pcntl")), na.rm = TRUE))
+  mutate(effects_score = gm_mean(c_across(contains("pcntl"))))
 
 
 
@@ -142,7 +147,10 @@ effects_scores <- list(npl, rmp, haz) %>%
 
 final_df <- list(climate_scores, exposure_scores, effects_scores) %>% 
   purrr::reduce(left_join, by = "FACILITYID") %>% 
-  mutate(final_risk_score = rowMeans(select(., contains("Score"))))
+  # remove rowwise
+  ungroup() %>% 
+  mutate(final_risk_score = rowMeans(select(., contains("score"))), 
+         final_risk_score_pcntl = cume_dist(final_risk_score) * 100)
 
 # save!
 write_csv(final_df, paste0("data/processed/final_df_", Sys.Date(), ".csv"))

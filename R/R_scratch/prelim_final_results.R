@@ -7,10 +7,44 @@ install_version("usmap", version = "0.6.1", repos = "http://cran.us.r-project.or
 
 library(usmap)
 
+# read in final data frame
+
+df <- read_csv("data/processed/final_df_2023-07-27.csv")
+
+
+# data exploration ------------------------------------------------
+
+# read in prison shapefile with full info
+prisons <- read_sf("data/processed/study_prisons.shp")
+
+
+# convert final score to percentile and tie to full prison info
+df_stats <- df %>% 
+  mutate(FACILITYID = as.character(FACILITYID)) %>% 
+  left_join(prisons, by = "FACILITYID")
+
+# find top 100 and look at prison stats
+top100 <- arrange(df_stats, -final_risk_score_pcntl)[1:100,] 
+  
+
+
+top100 %>% group_by(STATE) %>% count()
+# 30% in CA, 
+
+#But compare this to total % of CA prisons in data set
+df_stats %>% group_by(STATE) %>% count()
+# 5% in CA (106)
+
+
+
+
+
+# map results --------------------------------------------------
+
 
 
 # read in processed prison centroids
-prisons <- read_sf("data/processed/prison_centroids.csv") %>% 
+prison_centroids <- read_sf("data/processed/prison_centroids.csv") %>% 
   #need to convert facilityid to numeric to join w/ processed datasets
   mutate(FACILITYID = as.numeric(FACILITYID),
          long = as.numeric(long),
@@ -18,35 +52,13 @@ prisons <- read_sf("data/processed/prison_centroids.csv") %>%
 
 
 # read in final df
-final_df <- read_csv("data/processed/final_df_2023-05-16.csv") %>% 
+df_map <- df %>% 
   #join to centroid points
-  left_join(prisons, by = "FACILITYID")
+  left_join(prison_centroids, by = "FACILITYID")
 
 
-# data exploration ------------------------------------------------
 
-# convert final score to percentile
-final_df <- final_df %>% 
-  mutate(final_risk_pcnt = cume_dist(final_risk_score) * 100)
-
-# find top 20 and look at prison stats
-
-prisons_shp <- read_sf("data/processed/study_prisons.shp")
-
-
-top100 <- arrange(final_df, -final_risk_pcnt)[1:100,] %>% 
-  mutate(FACILITYID = as.character(FACILITYID)) %>%
-  left_join(prisons_shp, by = "FACILITYID")
-
-
-top100 %>% group_by(STATE) %>% count()
-# 22% in CA, 
-# CA, GA, MD and FL make up 60% of top 100 prisons with highest vulnerability score
-
-
-# map results
-
-prisons_map <- usmap::usmap_transform(data = final_df, input_names = c("long", "lat"))
+prisons_map <- usmap::usmap_transform(data = df_map, input_names = c("long", "lat"))
 
 
 # climate map
@@ -114,7 +126,7 @@ ggsave(filename = "figs/effects_component_prelim.png")
 
 # final risk score
 plot_usmap(color = "#b3b3b3", size = 0.35) +
-  geom_point(data = prisons_map, aes(x = x, y = y, size = final_risk_pcnt, color = final_risk_pcnt),
+  geom_point(data = prisons_map, aes(x = x, y = y, size = final_risk_score_pcntl, color = final_risk_score_pcntl),
              alpha = 0.5) +
   scale_colour_gradient(low = "lightgray", high = "black", limits = c(0,100))+
   scale_radius(range = c(0.1, 4), limits = c(0,100))+
@@ -134,7 +146,7 @@ ggsave(filename = "figs/vulnerability_score_prelim_pcnt.png")
 
 # top 100 at risk prisons
 plot_usmap(color = "#b3b3b3", size = 0.35) +
-  geom_point(data = arrange(prisons_map, desc(final_risk_pcnt))[1:10,], aes(x = x, y = y),
+  geom_point(data = arrange(prisons_map, desc(final_risk_score_pcntl))[1:50,], aes(x = x, y = y),
              alpha = 0.6, size = 3, color = "red") +
   #scale_colour_gradient(low = "#b5f5c0", high = "#05871c")+
   #scale_radius(range = c(0.1, 4))+
