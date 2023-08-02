@@ -3,15 +3,18 @@
 #' This function calculates NPL facility proximity as the count of proposed and listed NPL
 #' facilities within 5km (or nearest one beyond 5km) each divided by the distance in km.
 #' 
-#' @param prisons An sf object of all prison polygons to be assessed
+#' @param sf_obj An sf object of all polygons to be assessed
 #' @param file The filepath to the NPL csv file
 #' @param dist The distance (in meters) to count facilities within. Default is 5000 (5km)
 #' @param save Whether to save the resulting dataframe (as .csv) or not.
-#' @param path If `save = TRUE`, the file path to save the dataframe.
+#' @param out_path If `save = TRUE`, the file path to save the dataframe.
 #' 
-#' @return A tibble with summed proximity values for each prison
-getNPL <- function(prisons, file = "data/processed/npl_addresses_geocoded_arc_sf.csv", 
-                   dist = 5000, save = FALSE, path = NULL){
+#' @return A tibble with summed proximity values for each buffered polygon
+calc_npl_proximity <- function(sf_obj,
+                     file,
+                     dist = 5000,
+                     save = TRUE,
+                     path = "outputs/") {
   
   npl <- read_csv(file) %>% 
     #keep only listed and proposed NPL
@@ -21,16 +24,16 @@ getNPL <- function(prisons, file = "data/processed/npl_addresses_geocoded_arc_sf
            Lat = str_remove(Lat, "\\)")) %>%
     filter(!is.na(Long) | !is.na(Lat)) %>% 
     st_as_sf(coords = c("Long", "Lat"), crs = 4326) %>% 
-    st_transform(crs = st_crs(prisons))
+    st_transform(crs = st_crs(sf_obj))
   
   
-  npl_prox <- effectsProximity(prisons, npl, dist = dist) %>% 
+  npl_prox <- effectsProximity(sf_obj, npl, dist = dist) %>% 
     rename(npl_prox = proximity_score)
   
   
   if(save == TRUE) {
     
-    write_csv(npl_prox, file = paste0(path, "/npl_prox_", Sys.Date(), ".csv"))
+    write_csv(npl_prox, file = paste0(out_path, "/npl_proximity_", Sys.Date(), ".csv"))
     
   }
   

@@ -3,10 +3,10 @@
 #' @param file The file path pointing to the subset of the CalEnviroScreen PDF report with the pesticides table
 #' @param save Whether to save (TRUE) the resulting dataframe (as .csv) or not (FALSE)
 #' @param out_path If `save = TRUE`, the file path to the folder to save the output csv to
-getEnviroPest <- function(file = "data/raw/pesticide_sedac/CalEnviroScreen40_PESTICIDE_LIST.pdf",
-                          save = TRUE, out_path = "data/processed/") {
+convert_pesticide_table <- function(file = "data/raw/pesticides/CalEnviroScreen40_PESTICIDE_LIST.pdf",
+                          save = TRUE, out_path = "data/processed/pesticides") {
   # Initialize variables
-  cal_pest <- extract_tables(trimmedPDF)
+  cal_pest <- extract_tables(file)
   cal_pest_all <- list()
 
   # Clean and stitch together pages of table
