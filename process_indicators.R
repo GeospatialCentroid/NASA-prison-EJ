@@ -13,7 +13,7 @@ lapply(list.files(
 source)
 
 # read in processed prison polygons
-prisons <- read_sf("data/processed/study_prisons.shp")
+prisons <- read_sf("data/processed/prisons/study_prisons.shp")
 
 
 # flood risk (takes 1-2 days to run, quite a few NAs too)

@@ -4,7 +4,7 @@ library(sf)
 library(tidyverse)
 
 
-prisons <- read_sf("data/raw/Prison_Boundaries.shp") %>% 
+prisons <- read_sf("data/raw/prisons/Prison_Boundaries.shp") %>% 
   #filter out just state and federal
   filter(TYPE %in% c("STATE", "FEDERAL")) %>% 
   #filter just U.S. (not territories)
@@ -13,7 +13,7 @@ prisons <- read_sf("data/raw/Prison_Boundaries.shp") %>%
   filter(POPULATION > 0) %>% filter(STATUS == "OPEN")
 
 
-write_sf(prisons, 'data/processed/study_prisons.shp')
+write_sf(prisons, 'data/processed/prisons/study_prisons.shp')
 
 
 #FYI looks like there are some prisons w/ dup names, so use facility IDs
@@ -31,4 +31,4 @@ prisons %>%
          lat = unlist(map(.$geometry,2))) %>%
   st_drop_geometry() %>% 
   select(FACILITYID, NAME, long, lat) %>% 
-  write_csv("data/processed/prison_centroids.csv")
+  write_csv("data/processed/prisons/prison_centroids.csv")
