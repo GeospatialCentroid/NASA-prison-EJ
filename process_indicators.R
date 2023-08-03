@@ -58,9 +58,10 @@ traffic_prox <- calc_traffic_proximity(
 
 
 # calculate Risk Management Plan (RMP) facility proximity
-rmpProx <- getRMP(prisons, save = TRUE, path = "data/processed/")
-
-
+rmp_prox <- calc_rmp_proximity(
+  sf_obj = prisons,
+  file = "data/raw/EPA_RMP/EPA_Emergency_Response_(ER)_Risk_Management_Plan_(RMP)_Facilities.csv"
+)
 # calculate NPL facility proximity
 npl_prox <- calc_npl_proximity(
   sf_obj = prisons,
@@ -69,7 +70,10 @@ npl_prox <- calc_npl_proximity(
 
 
 # calculate Haz waste facility proximity
-hazProx <- getHazWaste(prisons, save = TRUE, path = "data/processed/")
+haz_prox <- calc_haz_waste_proximity(
+  sf_obj = prisons,
+  file = "data/processed/hazardous_waste/TSD_LQGs.csv"
+)
 
 
 ## draft score calculation (pulling in files saved above) --------------------------------

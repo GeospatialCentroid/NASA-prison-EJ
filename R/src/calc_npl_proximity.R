@@ -9,7 +9,7 @@
 #' @param save Whether to save the resulting dataframe (as .csv) or not.
 #' @param out_path If `save = TRUE`, the file path to save the dataframe.
 #' 
-#' @return A tibble with summed proximity values for each buffered polygon
+#' @return A tibble with summed proximity scores for each buffered polygon
 calc_npl_proximity <- function(sf_obj,
                      file,
                      dist = 5000,
@@ -27,7 +27,7 @@ calc_npl_proximity <- function(sf_obj,
     st_transform(crs = st_crs(sf_obj))
   
   
-  npl_prox <- effectsProximity(sf_obj, npl, dist = dist) %>% 
+  npl_prox <- effects_proximity(sf_obj, npl, dist = dist) %>% 
     rename(npl_prox = proximity_score)
   
   

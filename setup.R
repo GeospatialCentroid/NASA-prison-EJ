@@ -15,7 +15,8 @@ package_load <- function(x) {
 ## list all required packages
 packages <- c('tidyverse',
               'sf',
-              'terra'
+              'terra',
+              'vroom'
 )
 
 ## load in packages
@@ -23,3 +24,9 @@ package_load(packages)
 
 # Source functions -------------------------------------------------------------
 purrr::map(list.files("R/", full.names = TRUE), source)
+
+
+# Create outputs folder in root directory --------------------------------------
+if (!dir.exists("outputs/")){
+  dir.create("outputs/")
+}
