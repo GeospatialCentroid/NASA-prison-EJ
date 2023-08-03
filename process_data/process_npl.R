@@ -6,7 +6,7 @@ library(furrr) # Parallel iterations for NPL geocoding
 
 
 # Read in NPL dataset
-npl <- readr::read_csv("data/raw/npl_sites.csv", skip = 13) %>%
+npl <- readr::read_csv("data/raw/NPL/npl_sites.csv", skip = 13) %>%
   janitor::clean_names() %>%
   mutate(zip_code = str_sub(zip_code, 2, 6))
 
