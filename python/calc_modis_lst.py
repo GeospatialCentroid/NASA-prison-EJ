@@ -10,8 +10,6 @@ import ee
 #ee.Authenticate()
 ee.Initialize()
 
-# import prisons
-#prison_centroids = ee.FeatureCollection("projects/ee-ccmothes/assets/prison_centroids")
 
 
 # define date range
@@ -55,8 +53,6 @@ modisdata = ee.ImageCollection('MODIS/061/MYD11A1') \
   .filter(ee.Filter.calendarRange(6, 8,'month'))
   
 
-#modisdata.first()
-  
                                     
 # Apply processing functions
 lst_day_processed = modisdata.map(toCelciusDay).map(applyQaMask)
@@ -64,16 +60,6 @@ lst_day_processed = modisdata.map(toCelciusDay).map(applyQaMask)
 # Now calculate average summer day temperature across date range
 summer_day_lst = lst_day_processed.select('LST_Day_1km').median()
                         
-#print(summer_day_lst)
-
-# Extract values at prison centroids
-#sampled_points = summer_day_lst.sampleRegions(
-#  collection=prison_centroids,
-#  scale=1000,
-#  geometries=True
-#)     
-
-# The sampleRegions method exceeds memory limits, use reduce method instead
 
 ## Import eeFeatureCollection from assets
 prisons = ee.FeatureCollection("projects/ee-ccmothes/assets/study_prisons")

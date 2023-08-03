@@ -8,6 +8,7 @@ Created on Thu Feb 23 11:00:09 2023
 # import and initialize earth enginge
 
 import ee
+#ee.Authenticate()
 ee.Initialize()
 
 # Import nlcd dataset
