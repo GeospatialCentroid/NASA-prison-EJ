@@ -9,7 +9,7 @@ tmap_mode("view")
 
 
 # Read in prison shapefile
-prisons <- read_sf("data/processed/study_prisons.shp")
+prisons <- read_sf("data/processed/prisons/study_prisons.shp")
 
 
 # Census Tracts --------------------
@@ -19,9 +19,25 @@ tracts <- tigris::tracts(cb = TRUE)
 
 # add area column
 tracts <- tracts %>% 
-  mutate(tract_area = st_area(.))
+  mutate(tract_area = st_area(.),
+         tract_area_km = as.numeric(tract_area/1000000))
 
 
+# explore area of census tracts
+tracts %>% 
+  filter(tract_area_km < 1)
+# 11284 of 85186 (13% are 1km^2 or less)
+
+mean(tracts$tract_area_km)
+# average is 109.6 km^2
+
+median(tracts$tract_area_km)
+# median is 4.74
+
+hist(tracts$tract_area_km)
+
+
+# compare prisons ----------------------------------------
 
 # join prisons to their census tract
 prison_tracts <- prisons %>% 
