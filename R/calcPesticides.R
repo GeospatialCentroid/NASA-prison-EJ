@@ -12,7 +12,7 @@
 #' 
 #' @return The total average pesticide application from 2020 in kg/ha*yr
 
-calcPesticides <- function(prisons, filePath = "data/raw/pesticide_sedac/ferman-v1-pest-chemgrids-v1-01-geotiff",
+calcPesticides <- function(prisons, filePath = "data/raw/pesticides/ferman-v1-pest-chemgrids-v1-01-geotiff",
                            pestTable = "data/processed/pesticide_list.csv", dist = 1000, save = TRUE, writePath = 'data/processed/'){
   # Read in SEDAC ApplicationRate .tif(s)
   sedac_filenames <- list.files(path = paste0(filePath,"/ApplicationRate/GEOTIFF"), 
