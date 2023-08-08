@@ -3,7 +3,7 @@ Indicator Metatdata
 
 <table style="width:99%;">
 <colgroup>
-<col style="width: 6%" />
+<col style="width: 7%" />
 <col style="width: 42%" />
 <col style="width: 5%" />
 <col style="width: 32%" />
@@ -125,7 +125,7 @@ one beyond 5km) each divided by the distance in km</td>
 <td></td>
 </tr>
 <tr class="odd">
-<td>Risk Management Plan Facilities</td>
+<td>Risk Management Plan facility proximity</td>
 <td><a
 href="https://hifld-geoplatform.opendata.arcgis.com/datasets/geoplatform::epa-emergency-response-er-risk-management-plan-rmp-facilities/explore?location=29.842034%2C-113.806709%2C3.92">HIFLD
 EPA ER Risk Management Plan Facilities</a></td>
