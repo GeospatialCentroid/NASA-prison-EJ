@@ -1,0 +1,201 @@
+---
+title: "Accessing and Summarizing the LDAS climate variables to calculate Heat Index"
+author: "Caitlin Mothes"
+date: "2023-08-09"
+output: html_document
+---
+
+# Credit
+
+This script is adapted from [this workflow](https://github.com/rossyndicate/ROSS_RS_mini_tools/blob/main/LDAS_data_rods/Download_Summarize_GLDAS.Rmd) authored by B Steele.
+
+```{r}
+library(tidyverse)
+library(lubridate)
+library(RcppRoll)
+
+gldas_dir <-  'data/raw/heat_index/GLDAS/'
+nldas_dir <-  'data/raw/heat_index/NLDAS/'
+```
+
+# Purpose
+
+This script downloads and summarizes NLDAS and GLDAS climate data for each point of interest (all prison localities in this case) using the ['data rods'](https://disc.gsfc.nasa.gov/information/tools?title=Hydrology%20Data%20Rods) approach for creating timeseries data from a specific location. We use NLDAS for all CONUS sites as the resolution is higher (0.125 degrees) and GLDAS for AK and HI sites (resolution 0.25 degrees) since they are not covered in the NLDAS data set.
+
+### Suggested citations:
+
+#### Data Rods:
+
+Teng, W., H. Rui, R. Strub, and B. Vollmer, 2016. Optimal reorganization of NASA earth science data for enhanced accessibility and usability for the hydrology community, *Journal of the American Water Resources Association (JAWRA), 52*(4), 825-835, [doi:10.1111/1752-1688.12405](http://onlinelibrary.wiley.com/doi/10.1111/1752-1688.12405/abstract).
+
+#### GLDAS Data:
+
+Beaudoing, H. and M. Rodell, NASA/GSFC/HSL (2019), GLDAS Noah Land Surface Model L4 3 hourly 0.25 x 0.25 degree V2.0, Greenbelt, Maryland, USA, Goddard Earth Sciences Data and Information Services Center (GES DISC), Accessed: **[*Data Access Date*]**, [10.5067/342OHQM9AK6Q](https://doi.org/10.5067/342OHQM9AK6Q)
+
+Beaudoing, H. and M. Rodell, NASA/GSFC/HSL (2020), GLDAS Noah Land Surface Model L4 3 hourly 0.25 x 0.25 degree V2.1, Greenbelt, Maryland, USA, Goddard Earth Sciences Data and Information Services Center (GES DISC), Accessed: **[*Data Access Date*]**, [10.5067/E7TYRXPJKWOQ](https://doi.org/10.5067/E7TYRXPJKWOQ)
+
+Rodell, M., P.R. Houser, U. Jambor, J. Gottschalck, K. Mitchell, C. Meng, K. Arsenault, B. Cosgrove, J. Radakovich, M. Bosilovich, J.K. Entin, J.P. Walker, D. Lohmann, and D. Toll, 2004: The Global Land Data Assimilation System, Bull. Amer. Meteor. Soc., 85, 381-394, [doi:[10.1175/BAMS-85-3-381](doi:%5B10.1175/BAMS-85-3-381){.uri}](<https://doi.org/10.1175/BAMS-85-3-381>)
+
+# Define LDAS dataset(s), variables, and timeframe
+
+Here we will pull the following variables from both NLDAS Primary Forcing Data L4 V2.0 and GLDAS Noah Land Surface Model L4 V2.1 :
+
+| Data set | Parameter    | Definition                       | Units |
+|----------|--------------|----------------------------------|-------|
+| NLDAS    | PSurf        | Surface Pressure                 | Pa    |
+| NLDAS    | Qair         | 2-m above ground specific humidy | kg/kg |
+| NLDAS    | Tair         | 2-m above ground temperature     | K     |
+| GLDAS    | Psurf_f_inst | Surface air pressure             | Pa    |
+| GLDAS    | Qair_f_inst  | Specific Humidiy                 | kg/kg |
+| GLDAS    | Tair_f_inst  | Near surface air temperature     | K     |
+
+```{r}
+#set parameters of function - these are found on the data rods website linked above
+gldas_mod = c('GLDAS_NOAH025_3H_v2.0', 'GLDAS_NOAH025_3H_v2.1')
+params = c('Wind_f_inst', 'Tair_f_inst', 'Rainf_f_tavg', 'SWdown_f_tavg')
+
+#time period of interest - v 2.0 and v 2.1 have different time periods of coverage, and to keep the download from hanging, you have to have separate start/end dates
+start_date_2.0 = '1980-01-01'
+start_date_2.1 = '2000-01-01'
+end_date_2.0 = '2015-01-01'
+end_date_2.1 = '2023-01-01'
+
+#GLDAS data are in 0.25 degree increments, of which Yojoa intersects with a few kernels, the following degrees would prioritize the kernel over the most water area of Yojoa
+lat = 14.8768
+lon = -87.9791
+
+#function to make wwws to ping
+make_www_2.0 = function(model, var){#, s_d, e_d, lat, lon) {
+  s_d = start_date_2.0
+  e_d = end_date_2.0
+  paste0('https://hydro1.gesdisc.eosdis.nasa.gov/daac-bin/access/timeseries.cgi?variable=GLDAS2:', model, ':', var, '&startDate=', s_d, 'T00:00&endDate=', e_d, 'T21:00&location=GEOM:POINT(', lon, ',%20', lat, ')&type=asc2')
+}
+
+make_www_2.1 = function(model, var){#, s_d, e_d, lat, lon) {
+  s_d = start_date_2.1
+  e_d = end_date_2.1
+  paste0('https://hydro1.gesdisc.eosdis.nasa.gov/daac-bin/access/timeseries.cgi?variable=GLDAS2:', model, ':', var, '&startDate=', s_d, 'T00:00&endDate=', e_d, 'T21:00&location=GEOM:POINT(', lon, ',%20', lat, ')&type=asc2')
+}
+
+#make a list of all wwws for download
+v2.0_www = unlist(map2(rep(gldas_mod[1], times = length(params)), params, make_www_2.0))
+v2.1_www = unlist(map2(rep(gldas_mod[2], times = length(params)), params, make_www_2.1))
+```
+
+# Download all GLDAS data
+
+```{r}
+for(w20 in 1:length(v2.0_www)) {
+  download.file(url = v2.0_www[w20], destfile = file.path(gldas_dir, paste0(rep(gldas_mod[1], length(params))[w20], '_', params[w20], '.csv')))
+}
+
+for(w21 in 1:length(v2.1_www)) {
+  download.file(url = v2.1_www[w21], destfile = file.path(gldas_dir, paste0(rep(gldas_mod[2], length(params))[w21], '_', params[w21], '.csv')))
+}
+```
+
+## Load GLDAS data
+
+Let's load the GLDAS data and collate them all together
+
+```{r}
+#make list of files fo GLDAS data
+files = list.files(gldas_dir)
+
+formatGLDAS = function(file){
+  f =read.delim(file.path(gldas_dir, file), skip = 12, sep = '\t')
+  colnames(f) = 'data'
+  f = f %>%
+    rownames_to_column('datetime') %>% 
+    mutate(data = as.character(data),
+           datetime = as.character(datetime),
+           parameter = unlist(str_split(file, pattern = '_'))[5],
+           version = unlist(str_split(file, pattern = '_'))[4])
+  return(f)
+}
+
+
+all_gldas = map_dfr(files, formatGLDAS) %>% 
+  mutate(datetime_gmt = as.POSIXct(datetime, tz = 'Etc/GMT+0'),
+         data = as.numeric(data))
+
+#plot for reality check
+ggplot(all_gldas, aes(x = datetime_gmt, y = data)) +
+  geom_point() +
+  facet_grid(parameter ~ ., scales = 'free_y') +
+  theme_bw()
+
+```
+
+## Re-orient the dataset to horizontal
+
+First, aggregate overlap of data to mean and pivot to horizontal.
+
+```{r}
+all_gldas_h = all_gldas %>% 
+  group_by(datetime, parameter) %>% 
+  summarise(aggrate_data = mean(data)) %>% 
+  pivot_wider(names_from = c('parameter'),
+              values_from = 'aggrate_data')
+```
+
+## Summarize data in 5 and 7 days previous
+
+First, correct the time to be local and aggregate to daily
+
+```{r}
+all_gldas_h$datetime_gmt = as.POSIXct(all_gldas_h$datetime, tz = 'Etc/GMT+0')#all GLDAS is in GMT
+all_gldas_h$datetime_local = with_tz(all_gldas_h$datetime_gmt, tz = 'Etc/GMT+6') #NOTE TZ IS INTENTIONALLY INVERTED
+all_gldas_h$date = as.Date(all_gldas_h$datetime_local)
+
+#summarize to daily data
+gldas_daily = all_gldas_h %>% 
+  group_by(date) %>% 
+  summarise(max_temp = max(Tair),
+            min_temp = min(Tair),
+            precip = sum(Rainf),
+            sol_rad = sum(SWdown),
+            max_wind = max(Wind),
+            mean_wind = mean(Wind),
+            min_wind = min(Wind)) %>% 
+  rowid_to_column() %>% 
+  filter(date >= as.Date('1980-01-01')) %>% 
+  arrange(date)
+
+```
+
+Rolling average for 7 day window prior to date
+
+```{r}
+sevenday = as.data.frame(gldas_daily$date[7:nrow(gldas_daily)])
+colnames(sevenday) = 'date'
+sevenday$max_temp_7 = roll_max(x  = gldas_daily$max_temp, align = 'right', 7)
+sevenday$min_temp_7 = roll_min(x  = gldas_daily$min_temp, align = 'right', 7)
+sevenday$precip_7 = roll_sum(x  = gldas_daily$precip, align = 'right', 7)
+sevenday$solrad_7 = roll_sum(x  = gldas_daily$sol_rad, align = 'right', 7)
+sevenday$max_wind_7 = roll_max(x  = gldas_daily$max_wind, align = 'right', 7)
+sevenday$mean_wind_7 = roll_mean(x  = gldas_daily$mean_wind, align = 'right', 7)
+sevenday$min_wind_7 = roll_min(x  = gldas_daily$min_wind, align = 'right', 7)
+```
+
+Rolling average for 5 day window prior to date
+
+```{r}
+fiveday = as.data.frame(gldas_daily$date[5:nrow(gldas_daily)])
+colnames(fiveday) = 'date'
+fiveday$max_temp_5 = roll_max(x  = gldas_daily$max_temp, align = 'right', 5)
+fiveday$min_temp_5 = roll_min(x  = gldas_daily$min_temp, align = 'right', 5)
+fiveday$precip_5 = roll_sum(x  = gldas_daily$precip, align = 'right', 5)
+fiveday$solrad_5 = roll_sum(x  = gldas_daily$sol_rad, align = 'right', 5)
+fiveday$max_wind_5 = roll_max(x  = gldas_daily$max_wind, align = 'right', 5)
+fiveday$mean_wind_5 = roll_mean(x  = gldas_daily$mean_wind, align = 'right', 5)
+fiveday$min_wind_5 = roll_min(x  = gldas_daily$min_wind, align = 'right', 5)
+```
+
+## Join GLDAS summaries and export
+
+```{r}
+GLDAS_summary = full_join(fiveday, sevenday)
+
+write.csv(GLDAS_summary, file.path(gldas_dir, 'GLDAS_summaries.csv'), row.names = F)
+```
