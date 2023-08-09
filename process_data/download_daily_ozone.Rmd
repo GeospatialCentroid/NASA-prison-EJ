@@ -25,5 +25,19 @@ Now set up iteration to download the file for each year/month combo.
 
 ```{r}
 #specify the folder path to save unzipped files to
-path <- ""
+path <- "data/raw/air_quality/o3_daily/"
+
+for(i in 1:length(dates)){
+  
+  downloadLink <- "https://sedac.ciesin.columbia.edu/downloads/data/aqdh/aqdh-o3-concentrations-contiguous-us-1-km-2000-2016/aqdh-o3-concentrations-contiguous-us-1-km-2000-2016-201601-geotiff.zip"
+  
+   #download boundary 
+  temp1 <- tempfile()
+  download(downloadLink, dest = "dataset.zip", mode = "wb")
+  temp2 <- tempdir()
+  test <- unz(temp1, "dat")
+  
+}
 ```
+
+This doesn't work
