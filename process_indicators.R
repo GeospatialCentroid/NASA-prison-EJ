@@ -39,10 +39,11 @@ ozone <- calc_ozone(
 # pm2.5 (may change dataset, check for more recent years)
 pm25 <-
   calc_pm25(
-    sf_object = prisons,
-    folder = "data/raw/air_quality/pm2-5-us-1-km-2000-2016-annual/",
+    sf_obj = prisons,
+    folder = "data/raw/air_quality/pm2.5_sedac/",
     dist = 1000,
-    years = c(2015, 2016)
+    years = c(2017, 2019),
+    save = FALSE
   )
 
 

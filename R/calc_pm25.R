@@ -11,17 +11,17 @@
 #' @param out_path If `save = TRUE`, the file path to save the dataframe.
 #' 
 #' @return A tibble with total mean PM 2.5 across selected years within each buffered polygon boundary
-getPM25 <-
+calc_pm25 <-
   function(sf_obj,
            folder,
-           dist = 5000,
-           years = c(2000, 2016),
+           dist = 1000,
+           years = c(2017, 2019),
            save = TRUE,
            out_path = 'outputs/') {
     
   #import and calculate avg annual ozone for specified year range
   
-  files <- list.files(folder, pattern = ".tif", full.names = TRUE)
+  files <- list.files(folder, pattern = ".tif$", full.names = TRUE)
   
   avg_pm25 <- paste0(as.character(years[1]:years[2]), ".tif") %>%
     map_chr( ~ str_subset(files, .x)) %>% 
