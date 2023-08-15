@@ -19,9 +19,9 @@ endDate = "2022-12-31"
 
 
 def toCelciusDay(image):
-  lst = image.select('LST_Day').subtract(273.15)
+  lst = image.select('LST_Day_1km').multiply(0.02).subtract(273.15)
   overwrite = True
-  result = image.addBands(lst, ['LST_Day'], overwrite)
+  result = image.addBands(lst, ['LST_Day_1km'], overwrite)
   return result
 
 
@@ -38,7 +38,7 @@ def bitwiseExtract(input, fromBit, toBit):
 # Bits 4-5 Ignore, any value is ok
 # Bits 6-7 <= 1 (Average LST error ≤ 2K)
 def applyQaMask(image):
-  lstDay = image.select('LST_Day')
+  lstDay = image.select('LST_Day_1km')
   qcDay = image.select('QC_Day')
   qaMask = bitwiseExtract(qcDay, 0, 1).eq(0)
   #dataQualityMask = bitwiseExtract(qcDay, 2, 3).eq(0)
@@ -49,7 +49,7 @@ def applyQaMask(image):
 
 
 # import MODIS
-modisdata = ee.ImageCollection('MODIS/061/MYD21C1') \
+modisdata = ee.ImageCollection('MODIS/061/MYD11A1') \
   .filterDate(ee.Date(startDate), ee.Date(endDate)) \
   .filter(ee.Filter.calendarRange(6, 8, 'month'))
 
@@ -135,7 +135,7 @@ daily_mean_lst = lst_day_processed.map(reduceRegions).flatten()
 task = ee.batch.Export.table.toDrive(
   collection=daily_mean_lst,
   folder="gee_exports",
-  description='prison_lst_daily_1_attempt3',
+  description='prison_lst_daily_1_myd11',
   fileFormat='CSV'
   #selectors=['FACILITYID', 'LST_Day_mean', 'system:index']
 )

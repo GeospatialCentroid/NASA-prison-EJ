@@ -19,9 +19,9 @@ endDate = "2022-12-31"
 
 
 def toCelciusDay(image):
-  lst = image.select('LST_Day').subtract(273.15)
+  lst = image.select('LST_Night_1km').multiply(0.02).subtract(273.15)
   overwrite = True
-  result = image.addBands(lst, ['LST_Day'], overwrite)
+  result = image.addBands(lst, ['LST_Night_1km'], overwrite)
   return result
 
 
@@ -38,65 +38,28 @@ def bitwiseExtract(input, fromBit, toBit):
 # Bits 4-5 Ignore, any value is ok
 # Bits 6-7 <= 1 (Average LST error ≤ 2K)
 def applyQaMask(image):
-  lstDay = image.select('LST_Day')
-  qcDay = image.select('QC_Day')
-  qaMask = bitwiseExtract(qcDay, 0, 1).eq(0)
+  lstNight = image.select('LST_Night_1km')
+  qcNight = image.select('QC_Night')
+  qaMask = bitwiseExtract(qcNight, 0, 1).eq(0)
   #dataQualityMask = bitwiseExtract(qcDay, 2, 3).eq(0)
   #cloudMask = bitwiseExtract(qcDay, 4, 5).eq(0)
   #lstErrorMask = bitwiseExtract(qcDay, 14, 15).gte(1)
   mask = qaMask
-  return lstDay.updateMask(mask)
+  return lstNight.updateMask(mask)
 
 
 # import MODIS
-modisdata = ee.ImageCollection('MODIS/061/MYD21C1') \
+modisdata = ee.ImageCollection('MODIS/061/MYD11A1') \
   .filterDate(ee.Date(startDate), ee.Date(endDate)) \
   .filter(ee.Filter.calendarRange(6, 8, 'month'))
 
 
 # Apply processing functions
-lst_day_processed = modisdata.map(toCelciusDay).map(applyQaMask)
+lst_night_processed = modisdata.map(toCelciusDay).map(applyQaMask)
 
-# Now calculate average summer day temperature across date range
-# summer_day_lst = lst_day_processed.select('LST_Day').median()
-
-# Caluclate number of extreme heat days
-# def hotdays(image):
-#        hot = image.gt("LST_Day", 35)
-#        return image.addBands(hot.rename('hotdays')
-#                              .set('system:time_start', image.get('system:time_start')))
-
-# lst_hotdays = ee.ImageCollection(lst_day_processed.select('LST_Day')).map(hotdays)
-
-# lst_hotdays_2012 = ee.ImageCollection(lst_hotdays.select('hotdays')).sum().float()
 
 # Import eeFeatureCollection from assets
 prisons = ee.FeatureCollection("projects/ee-ccmothes/assets/prisons_1")
-
-# filter lst for bounds of prisons
-# lst_day_processed_local = (lst_day_processed.filterBounds(prisons.geometry()))
-
-# reduce over prison polygons
-
-# define funciton to drop geo
-
-
-# def remove_geo(image):
-#     return image.setGeometry(None)
-
-# # define function
-
-
-# def lst_calc(image):
-#     lst = (image
-#         .select(['LST_Day'], ['LST_Day_mean'])
-#         .reduceRegions(
-#               reducer=ee.Reducer.mean(),
-#               collection=prisons,
-#               # crs = "EPSG:4326",
-#               scale=1000
-#               ))
-#     return lst.map(remove_geo)
 
 
 
@@ -115,7 +78,7 @@ def reduceRegions(image):
 
   def featureRefine(feature):
       return feature \
-          .select(['mean', 'FACILITYID'], ['LST_mean', 'FACILITYID']) \
+          .select(['mean', 'FACILITYID'], ['LST_mean_night', 'FACILITYID']) \
           .set('date', image.get('system:index'))
     
    # remove any features that have a null value for any property.        
@@ -124,7 +87,7 @@ def reduceRegions(image):
   .map(featureRefine)
 
 # attempt to map over image collection
-daily_mean_lst = lst_day_processed.map(reduceRegions).flatten()
+daily_mean_lst = lst_night_processed.map(reduceRegions).flatten()
 
 
 #prison_lst = lst_day_processed_local.map(lst_calc).flatten()
@@ -135,7 +98,7 @@ daily_mean_lst = lst_day_processed.map(reduceRegions).flatten()
 task = ee.batch.Export.table.toDrive(
   collection=daily_mean_lst,
   folder="gee_exports",
-  description='prison_lst_daily_1_attempt3',
+  description='prison_lst_daily_night',
   fileFormat='CSV'
   #selectors=['FACILITYID', 'LST_Day_mean', 'system:index']
 )
