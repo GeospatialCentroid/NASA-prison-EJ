@@ -32,3 +32,8 @@ prisons %>%
   st_drop_geometry() %>% 
   select(FACILITYID, NAME, long, lat) %>% 
   write_csv("data/processed/prisons/prison_centroids.csv")
+
+# Write prisons in 4326 to use in GEE
+st_read("data/processed/prisons/study_prisons.shp") %>% 
+  st_transform(crs = 4326) %>% 
+  write_sf("data/processed/prisons/study_prisons_4326.shp")
