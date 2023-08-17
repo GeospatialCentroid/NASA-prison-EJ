@@ -1,44 +1,37 @@
 # Mapping environmental injustices within the U.S. prison system
 
-This is the working repository for a NASA Equity and Environmental Justice project titled "Leveraging Earth science data to heighten awareness of environmental injustices within the U.S. prison system".
+This is the working repository for a NASA ROSES-21 A.49 Earth Science Applications: Equity and Environmental Justice funded project (Award No 80NSSC22K1465) titled "Leveraging Earth science data to heighten awareness of environmental injustices within the U.S. prison system".
+
+This repository hosts the workflow used to carry out the spatial analysis, from data retrieval to producing the final dataset that is hosted (here). Below are further details on the repository structure, how to use the code base, and data sources.
+
+Forward any questions reguarding this project and code base to Caitlin Mothes (ccmothes@colostate.edu)
 
 <br/>
 
-**General repository structure:**
+## Folder Descriptions
 
-    .
-    └── NASA-prison-EJ
-        ├── doc
-        ├── data
-        │   ├── raw
-        │   └── processed
-        ├── python
-        │   ├── src
-        |   ├── ee
-        │   └── py_scratch
-        ├── R
-        │   ├── src
-        │   └── R_scratch
-        ├── figs
-        ├── README.md
-        └── .gitignore
+-   `doc/` Project-specific references and metadata. Also includes the NASA-funded project proposal that includes background, objectives and methods of the project.
 
--   `data/` This folder is stored locally (see Github_Collab_Guide.docx in `doc/` for instructions on how to set up local data folder). All raw, unprocessed data lives in `raw/` and all datasets processed throughout the workflow go to `processed/`
+-   `data/` This folder is stored locally (see Github_Collab_Guide.docx in `doc/` for methods on how to set up a local data folder that syncs to a cloud-hosted folder). All raw, unprocessed data lives in `raw/` and all datasets processed throughout the workflow (using code in `process_data/`) go to `processed/`
 
--   `doc/` Project-specific references and metadata
+- `process-data/` Scripts to process raw data (when needed). Outputs of these scripts go into `data/processed/`
 
--   `python/` Python code for analysis
+-   `R/` R code for analysis, each formatted as an individual function for each indicator calculation (i.e., all indicators not requiring Earth Engine data sets).
 
-    -   `src/` Functions to calculate individual indicators
+-   `python/` Python code for Google Earth Enginge analyses. Specifically used to calculate canopy cover and land surface temperature variables.
 
-    -   `ee/` Code to import and process data from Google Earth Engine
+- `outputs/` 
 
-    -   `py_scratch` Working Python scripts / code outside of the main workflow
+- `analysis/` R code for all post-hoc analysis of final data set.
 
--   `R/` R code for analysis
+-   `figures/` Figures produced from analysis scripts.
 
-    -   `src/` Functions to calculate individual indicators
+- `working_scripts/` Old or in progress scripts outside of current workflow. External collaborators can disreguard this folder. 
 
-    -   `R_scratch` Working R scripts / code outside of the main workflow
 
--   `figs/` Figures produced from code
+## General workflow
+
+
+## Data sources and indicator methods
+
+
