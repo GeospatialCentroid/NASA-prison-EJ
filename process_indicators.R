@@ -31,8 +31,9 @@ wildfire_risk <- calc_wildfire_risk(
 
 # ozone
 ozone <- calc_ozone(
-  sf_obj = prisons, folder = "data/raw/air_quality/o3-us-1-km-2000-2016-annual/",
-  dist = 1000, years = c(2015, 2016)
+  sf_obj = prisons, 
+  folder = "data/raw/air_quality/o3_daily/",
+  dist = 1000, years = c(2014, 2016)
 )
 
 
