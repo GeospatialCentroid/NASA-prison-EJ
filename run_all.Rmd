@@ -1,0 +1,68 @@
+---
+title: "Code to process all indicators and create final data frame"
+author: "Caitlin C. Mothes, PhD"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+## Process indicators
+
+First we have to set up our environment, which is what the "setup.R" script is designed to do. This script will install (if necessary) and load all required packages, source all the functions needed for this workflow, and create a directory to save all outputs in.
+
+```{r}
+source("setup.R")
+```
+
+Also need to load in the spatial (sf) object to perform calculations on:
+
+```{r}
+# read in processed prison boundaries
+prisons <- read_sf("data/processed/prisons/study_prisons.shp")
+```
+
+All indicator functions are grouped into three components: climate, environmental exposures and environmental effects. To learn more about this methodology and these component groupings you can read the project description (proposal submitted to and funded by NASA) in the 'doc/' folder titled "NASA_EEJ_STM_Mothes.pdf".
+
+Each component has its own function, which will run each of the individual indicator functions, calculate indicator percentiles, and calculate overall component scores.
+
+**Note:** Some of these functions (e.g., calculating flood risk and traffic proximity) take a very long time to process (a couple of days), so consider that when executing these functions. Using a machine with a lot of memory/RAM is recommended.
+
+You can also run the indicator functions individually as opposed to in groups within the component functions.
+
+```{r}
+# calculate climate component
+climate_scores <- climate_component(
+  prisons = prisons,
+  heat_risk_file = "data/processed/heat_exposure/lst_average.csv",
+  canopy_cover_folder = "data/processed/canopy_cover/",
+  save = TRUE,
+  out_path = "outputs/"
+)
+```
+
+```{r}
+# calculate environmental exposures component
+exposures_scores <- exposures_component(prisons = prisons, save = TRUE, path = "outputs/")
+```
+
+```{r}
+# calculate environmental effects component
+effects_scores <- effects_component(prisons = prisons, save = TRUE, out_path = "outputs/")
+```
+
+Finally, combine all component scores and calculate a single environmental risk metric:
+
+```{r}
+final_df <- list(climate_scores, exposure_scores, effects_scores) %>%
+  purrr::reduce(left_join, by = "FACILITYID") %>%
+  # remove rowwise
+  ungroup() %>%
+  mutate(
+    final_risk_score = rowMeans(select(., contains("score"))),
+    final_risk_score_pcntl = cume_dist(final_risk_score) * 100
+  )
+
+
+#save the final csv
+write_csv(final_df, paste0("outputs/final_df_", Sys.Date(), ".csv"))
+
+```
