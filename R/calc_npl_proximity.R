@@ -14,7 +14,7 @@ calc_npl_proximity <- function(sf_obj,
                      file,
                      dist = 5000,
                      save = TRUE,
-                     path = "outputs/") {
+                     out_path = "outputs/") {
   
   npl <- read_csv(file) %>% 
     #keep only listed and proposed NPL

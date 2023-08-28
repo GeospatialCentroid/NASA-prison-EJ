@@ -7,7 +7,7 @@
 #' @param out_path If `save = TRUE`, the file path to save the dataframe.
 #'
 #' @return A tibble with raw values and percentiles for each indicator and the exposure component score
-effects_component <- function(prisons, save = TRUE, path = "outputs/") {
+effects_component <- function(prisons, save = TRUE, out_path = "outputs/") {
   
   # calculate Risk Management Plan (RMP) facility proximity
   rmp_prox <- calc_rmp_proximity(

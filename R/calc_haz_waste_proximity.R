@@ -14,7 +14,7 @@ calc_haz_waste_proximity <- function(sf_obj,
                                      file,
                                      dist = 5000,
                                      save = TRUE,
-                                     path = "outputs/") {
+                                     out_path = "outputs/") {
   haz <- read_csv(file) %>%
     # NOTE, may need to geocode the couple thousand NA coords
     filter(!is.na(LONGITUDE83) | !is.na(LATITUDE83)) %>%

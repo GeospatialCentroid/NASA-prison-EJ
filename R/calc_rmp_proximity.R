@@ -14,7 +14,7 @@ calc_rmp_proximity <- function(sf_obj,
                      file,
                      dist = 5000,
                      save = TRUE,
-                     path = "outputs/") {
+                     out_path = "outputs/") {
   rmp <- read_csv(file) %>%
     st_as_sf(coords = c("LONGITUDE8", "LATITUDE83"), crs = 4269) %>%
     st_transform(crs = st_crs(sf_obj))
