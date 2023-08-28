@@ -13,7 +13,7 @@
 climate_component <-
   function(prisons,
            heat_risk_file,
-           canpoy_cover_folder,
+           canopy_cover_folder,
            save = TRUE,
            out_path = "outputs/") {
     # run climate indicator functions
