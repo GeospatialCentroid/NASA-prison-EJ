@@ -40,11 +40,11 @@ def bitwiseExtract(input, fromBit, toBit):
 def applyQaMask(image):
   lstDay = image.select('LST_Day_1km')
   qcDay = image.select('QC_Day')
-  qaMask = bitwiseExtract(qcDay, 0, 1).eq(0)
-  #dataQualityMask = bitwiseExtract(qcDay, 2, 3).eq(0)
+  qaMask = bitwiseExtract(qcDay, 0, 1).lte(1)
+  dataQualityMask = bitwiseExtract(qcDay, 2, 3).eq(0)
   #cloudMask = bitwiseExtract(qcDay, 4, 5).eq(0)
-  #lstErrorMask = bitwiseExtract(qcDay, 14, 15).gte(1)
-  mask = qaMask
+  lstErrorMask = bitwiseExtract(qcDay, 6, 7).eq(0)
+  mask = qaMask.And(dataQualityMask).And(lstErrorMask)
   return lstDay.updateMask(mask)
 
 
@@ -71,7 +71,7 @@ lst_day_processed = modisdata.map(toCelciusDay).map(applyQaMask)
 # lst_hotdays_2012 = ee.ImageCollection(lst_hotdays.select('hotdays')).sum().float()
 
 # Import eeFeatureCollection from assets
-prisons = ee.FeatureCollection("projects/ee-ccmothes/assets/prisons_1")
+prisons = ee.FeatureCollection("projects/ee-ccmothes/assets/study_prisons")
 
 # filter lst for bounds of prisons
 # lst_day_processed_local = (lst_day_processed.filterBounds(prisons.geometry()))
@@ -132,10 +132,11 @@ daily_mean_lst = lst_day_processed.map(reduceRegions).flatten()
 #prison_lmtd = prison_lst.filter(ee.Filter.notNull(['LST_Day_mean']))
 
 # export to csv
+# Note to change description for each prison chunk
 task = ee.batch.Export.table.toDrive(
   collection=daily_mean_lst,
   folder="gee_exports",
-  description='prison_lst_daily_1_myd11',
+  description='prison_lst_daily_all',
   fileFormat='CSV'
   #selectors=['FACILITYID', 'LST_Day_mean', 'system:index']
 )
