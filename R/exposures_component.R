@@ -7,7 +7,7 @@
 #' @param out_path If `save = TRUE`, the file path to save the dataframe.
 #'
 #' @return A tibble with raw values and percentiles for each indicator and the exposure component score
-exposures_component <- function(prisons, save = TRUE, path = "outputs") {
+exposures_component <- function(prisons, save = TRUE, out_path = "outputs/") {
   # run indicator functions
   # ozone
   ozone <- calc_ozone(
