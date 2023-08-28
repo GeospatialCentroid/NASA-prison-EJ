@@ -15,26 +15,31 @@ exposures_component <- function(prisons, save = TRUE, path = "outputs") {
     dist = 1000, years = c(2015, 2016)
   )
 
+  print("Ozone indicator calculated")
 
   # pm2.5 (may change dataset, check for more recent years)
   pm25 <-
     calc_pm25(
-      sf_object = prisons,
+      sf_obj = prisons,
       folder = "data/raw/air_quality/pm2-5-us-1-km-2000-2016-annual/",
       dist = 1000,
       years = c(2015, 2016)
     )
 
+  print("PM 2.5 indicator calculated")
 
   # pesticides (ran this manually to save time re-creating all rasters)
   pesticides <- calcPesticides(prisons, dist = 1000, save = TRUE)
 
+  print("Pesticides indicator calculated")
 
   # traffic proximity (takes 1.5 days to run on Desktop comp)
   traffic_prox <- calc_traffic_proximity(
     sf_obj = prisons,
     file = "data/processed/traffic_proximity/aadt_2018.RData"
   )
+  
+  print("Traffic proximity indicator calculated")
 
 
 
@@ -58,7 +63,10 @@ exposures_component <- function(prisons, save = TRUE, path = "outputs") {
 
   if (save == TRUE) {
     write_csv(df, file = paste0(out_path, "/exposures_component_", Sys.Date(), ".csv"))
-  }
+    
+    print(paste("Exposures component saved to", out_path))
+    
+    }
 
   return(df)
 }
