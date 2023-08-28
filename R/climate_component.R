@@ -18,16 +18,21 @@ climate_component <-
            out_path = "outputs/") {
     # run climate indicator functions
     flood_risk <- calc_flood_risk(prisons, dist = 1000)
+    
+    print("Flood Risk indicator calculated")
 
     wildfire_risk <- calc_wildfire_risk(
       prisons,
       file = "data/raw/wildfire/whp2020_GeoTIF/"
     )
+    
+    print("Wildfire risk indicator calculated")
 
 
     # read in outputs from modis and canopy cover GEE scripts
 
     heat_risk <- read_csv(heat_risk_file)
+    
 
     canopy_cover <-
       list.files(canopy_cover_folder, pattern = ".csv", full.names = TRUE) %>%
@@ -56,6 +61,8 @@ climate_component <-
 
     if (save == TRUE) {
       write_csv(df, file = paste0(out_path, "/climate_component_", Sys.Date(), ".csv"))
+
+      print(paste("Climate component data saved to", out_path))
     }
 
     return(df)
