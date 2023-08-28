@@ -27,4 +27,4 @@ lst_summary <- lst_daily %>%
   summarise(lst_avg = median(LST_mean, na.rm = TRUE))
 
 # keep just total average for final dataset
-write_csv(lst_summary, "data/raw/heat_exposure/lst_average.csv")
+write_csv(lst_summary, "data/processed/heat_exposure/lst_average.csv")
