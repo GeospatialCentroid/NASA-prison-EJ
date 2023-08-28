@@ -7,19 +7,24 @@
 #' @param out_path If `save = TRUE`, the file path to save the dataframe.
 #'
 #' @return A tibble with raw values and percentiles for each indicator and the exposure component score
-exposures_component <- function(prisons, save = TRUE, path = "outputs/") {
+effects_component <- function(prisons, save = TRUE, path = "outputs/") {
   
   # calculate Risk Management Plan (RMP) facility proximity
   rmp_prox <- calc_rmp_proximity(
     sf_obj = prisons,
     file = "data/raw/EPA_RMP/EPA_Emergency_Response_(ER)_Risk_Management_Plan_(RMP)_Facilities.csv"
   )
+  
+  print("RMP proximity caculated")
+  
+  
   # calculate NPL facility proximity
   npl_prox <- calc_npl_proximity(
     sf_obj = prisons,
     file = "data/processed/npl_addresses_geocoded_arc_sf.csv"
   )
   
+  print("NPL proximity calculated")
   
   # calculate Haz waste facility proximity
   haz_prox <- calc_haz_waste_proximity(
@@ -27,6 +32,7 @@ exposures_component <- function(prisons, save = TRUE, path = "outputs/") {
     file = "data/processed/hazardous_waste/TSD_LQGs.csv"
   )
   
+  print("Hazardous waste facility proximity calculated")
   
   
   # join data frames and calculate climate component score
@@ -47,7 +53,10 @@ exposures_component <- function(prisons, save = TRUE, path = "outputs/") {
   
   
   if (save == TRUE) {
-    write_csv(df, file = paste0(out_path, "/effects_component_", Sys.Date(), ".csv"))
+    write_csv(df,
+              file = paste0(out_path, "/effects_component_", Sys.Date(), ".csv"))
+    
+    print("Effects component data saved to", out_path)
   }
   
   return(df)
