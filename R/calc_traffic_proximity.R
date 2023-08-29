@@ -8,7 +8,7 @@
 #' @param file The filepath to the .RData file for the 2018 U.S. AADT shapefile. See 'process_traffic.R' script for how this was processed
 #' @param dist The buffer distance (in meters) to add around polygon boundaries. Default is 500m.
 #' @param save Whether to save the resulting dataframe (as .csv) or not.
-#' @param path If `save = TRUE`, the file path to save the dataframe.
+#' @param out_path If `save = TRUE`, the file path to save the dataframe.
 #'
 #' @return A tibble with traffic proximity scores for each buffered polygon boundary
 calc_traffic_proximity <-
@@ -16,7 +16,7 @@ calc_traffic_proximity <-
            file,
            dist = 500,
            save = TRUE,
-           path = "outputs/") {
+           out_path = "outputs/") {
     load(file)
 
     # set attribute constant argument to suppress sf warning w/ st_crop

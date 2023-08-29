@@ -66,7 +66,8 @@ calc_wildfire_risk <- function(sf_obj,
   # Resultant wildfire calculation dataset
   prisons_wf <-
     bind_rows(prisons_conus_wf, prisons_ak_wf, prisons_hi_wf) %>%
-    dplyr::select(FACILITYID, wildfire_risk)
+    dplyr::select(FACILITYID, wildfire_risk) %>% 
+    st_drop_geometry()
   
   
   if (save == TRUE) {

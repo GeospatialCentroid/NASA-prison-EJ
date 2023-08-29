@@ -11,7 +11,7 @@
 #' 
 #' @return The total average pesticide application from 2020 in kg/ha*yr
 
-calcPesticides <-
+calc_pesticides <-
   function(sf_obj,
            folder = "data/raw/pesticides/ferman-v1-pest-chemgrids-v1-01-geotiff",
            dist = 1000,

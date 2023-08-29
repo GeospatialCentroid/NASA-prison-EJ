@@ -3,16 +3,28 @@
 #' This function runs all the functions to process environmental exposure indicators
 #'
 #' @param prisons An sf object of all prison polygons to be assessed
+#' @param ozone_folder The filepath to the folder with all the Ozone rasters (one for each month/year)
+#' @param pm25_folder The filepath to the folder with all the PM2.5 rasters
+#' @param pesticide_folder The filepath to the folder with all the pesticide rasters
+#' @param traffic_file The filepath to the .RData file for the 2018 U.S. AADT shapefile. See 'process_traffic.R' script for how this was processed
 #' @param save Whether to save the resulting dataframe (as .csv) or not
 #' @param out_path If `save = TRUE`, the file path to save the dataframe.
 #'
 #' @return A tibble with raw values and percentiles for each indicator and the exposure component score
-exposures_component <- function(prisons, save = TRUE, out_path = "outputs/") {
-  # run indicator functions
+exposures_component <-
+  function(prisons,
+           ozone_folder,
+           pm25_folder,
+           pesticide_folder,
+           traffic_file,
+           save = TRUE,
+           out_path = "outputs/") {
+    # run indicator functions
   # ozone
   ozone <- calc_ozone(
-    sf_obj = prisons, folder = "data/raw/air_quality/o3-us-1-km-2000-2016-annual/",
-    dist = 1000, years = c(2015, 2016)
+    sf_obj = prisons, folder = ozone_folder,
+    dist = 1000, years = c(2015, 2016),
+    out_path = out_path
   )
 
   print("Ozone indicator calculated")
@@ -21,22 +33,28 @@ exposures_component <- function(prisons, save = TRUE, out_path = "outputs/") {
   pm25 <-
     calc_pm25(
       sf_obj = prisons,
-      folder = "data/raw/air_quality/pm2-5-us-1-km-2000-2016-annual/",
+      folder = pm25_folder,
       dist = 1000,
-      years = c(2015, 2016)
+      years = c(2015, 2016),
+      out_path = out_path
     )
 
   print("PM 2.5 indicator calculated")
 
   # pesticides (ran this manually to save time re-creating all rasters)
-  pesticides <- calcPesticides(prisons, dist = 1000, save = TRUE)
+  pesticides <- calc_pesticides(prisons, 
+                                folder = pesticide_folder,
+                                dist = 1000, 
+                                save = TRUE,
+                                out_path = out_path)
 
   print("Pesticides indicator calculated")
 
   # traffic proximity (takes 1.5 days to run on Desktop comp)
   traffic_prox <- calc_traffic_proximity(
     sf_obj = prisons,
-    file = "data/processed/traffic_proximity/aadt_2018.RData"
+    file = traffic_file,
+    out_path = out_path
   )
   
   print("Traffic proximity indicator calculated")

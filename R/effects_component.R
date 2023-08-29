@@ -3,16 +3,27 @@
 #' This function runs all the functions to process environmental exposure indicators
 #'
 #' @param prisons An sf object of all prison polygons to be assessed
+#' @param rmp_file The filepath to the RMP csv file
+#' @param npl_file The filepath to the NPL csv file
+#' @param haz_file The filepath to the hazardous waste csv file
 #' @param save Whether to save the resulting dataframe (as .csv) or not
 #' @param out_path If `save = TRUE`, the file path to save the dataframe.
 #'
 #' @return A tibble with raw values and percentiles for each indicator and the exposure component score
-effects_component <- function(prisons, save = TRUE, out_path = "outputs/") {
+effects_component <-
+  function(prisons,
+           rmp_file,
+           npl_file,
+           haz_file,
+           save = TRUE,
+           out_path = "outputs/"
+  ) {
   
   # calculate Risk Management Plan (RMP) facility proximity
   rmp_prox <- calc_rmp_proximity(
     sf_obj = prisons,
-    file = "data/raw/EPA_RMP/EPA_Emergency_Response_(ER)_Risk_Management_Plan_(RMP)_Facilities.csv"
+    file = rmp_file,
+    out_path = out_path
   )
   
   print("RMP proximity caculated")
@@ -21,7 +32,8 @@ effects_component <- function(prisons, save = TRUE, out_path = "outputs/") {
   # calculate NPL facility proximity
   npl_prox <- calc_npl_proximity(
     sf_obj = prisons,
-    file = "data/processed/npl_addresses_geocoded_arc_sf.csv"
+    file = npl_file,
+    out_path = out_path
   )
   
   print("NPL proximity calculated")
@@ -29,7 +41,8 @@ effects_component <- function(prisons, save = TRUE, out_path = "outputs/") {
   # calculate Haz waste facility proximity
   haz_prox <- calc_haz_waste_proximity(
     sf_obj = prisons,
-    file = "data/processed/hazardous_waste/TSD_LQGs.csv"
+    file = haz_file,
+    out_path = out_path
   )
   
   print("Hazardous waste facility proximity calculated")
