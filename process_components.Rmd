@@ -1,0 +1,126 @@
+---
+title: "Code to process all compoments and create final data frame"
+author: "Caitlin C. Mothes, PhD"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+## Process components
+
+First we have to set up our environment, which is what the "setup.R" script is designed to do. This script will install (if necessary) and load all required packages, source all the functions needed for this workflow, and create a directory to save all outputs in.
+
+```{r}
+source("setup.R")
+```
+
+Also need to load in the spatial (sf) object to perform calculations on:
+
+```{r}
+# read in processed prison boundaries
+prisons <- read_sf("data/processed/prisons/study_prisons.shp")
+```
+
+All indicator functions are grouped into three components: climate, environmental exposures and environmental effects. To learn more about this methodology and these component groupings you can read the project description (proposal submitted to and funded by NASA) in the 'doc/' folder titled "NASA_EEJ_STM_Mothes.pdf".
+
+Each component has its own function, which will run each of the individual indicator functions, calculate indicator percentiles, and calculate overall component scores.
+
+If you want to change any of the default settings for each indicator (e.g., buffer distance, year range), you will have to edit the component function (in the 'R/' folder)
+
+**Note:** Some of these functions (e.g., calculating flood risk and traffic proximity) take a very long time to process (a couple of days), so consider that when executing these functions. Using a machine with a lot of memory/RAM is recommended.
+
+You can also run the indicator functions individually as opposed to as component scores (see 'process_indicators.Rmd').
+
+### Run component functions
+
+**Some of these functions take a long time (days). To speed up the process and run these scripts in the background (so you can still use your R session) go to the next section about running scripts as background jobs.**
+
+```{r}
+# calculate climate component
+climate_scores <- climate_component(
+  prisons = prisons,
+  fire_file = "data/raw/wildfire/whp2020_GeoTIF/",
+  heat_risk_file = "data/processed/heat_exposure/lst_average.csv",
+  canopy_cover_folder = "data/processed/canopy_cover/",
+  save = TRUE,
+  out_path = "outputs/"
+)
+```
+
+```{r}
+# calculate environmental exposures component
+exposures_scores <- exposures_component(prisons = prisons, 
+                                        ozone_folder = "data/raw/air_quality/o3_daily/",
+                                        pm25_folder = "data/raw/air_quality/pm2.5_sedac/",
+                                        pesticide_folder = "data/raw/pesticides/ferman-v1-pest-chemgrids-v1-01-geotiff",
+                                        traffic_file = "data/processed/traffic_proximity/aadt_2018.RData",
+                                        save = TRUE, 
+                                        out_path = "outputs/")
+```
+
+```{r}
+# calculate environmental effects component
+effects_scores <- effects_component(prisons = prisons, 
+                                    rmp_file = "data/raw/EPA_RMP/EPA_Emergency_Response_(ER)_Risk_Management_Plan_(RMP)_Facilities.csv",
+                                    npl_file = "data/processed/npl_addresses_geocoded_arc_sf.csv",
+                                    haz_file = "data/processed/hazardous_waste/TSD_LQGs.csv",
+                                    save = TRUE, out_path = "outputs/")
+```
+
+### Run as background jobs
+
+There are three job scripts, one for each component in the 'jobs/' folder. Running the code below will execute these scripts as background jobs, which will allow you to keep using R, show the progress of each script, and spread the work across more cores.
+
+To do so you will need to install and load the {[rstudioapi](https://rstudio.github.io/rstudioapi/index.html)} package
+
+```{r}
+library(rstudioapi)
+```
+
+```{r}
+# run climate component
+jobRunScript(
+  path = "jobs/climate_comp_job.R",
+  name = "climate_component",
+  workingDir = getwd(),
+  exportEnv = "climate_env"
+)
+```
+
+```{r}
+# run env exposures component
+jobRunScript(
+  path = "jobs/exposures_comp_job.R",
+  name = "exposures_component",
+  workingDir = getwd(),
+  exportEnv = "exposures_env"
+)
+```
+
+```{r}
+# run env effects component
+jobRunScript(
+  path = "jobs/effects_comp_job.R",
+  name = "effects_component",
+  workingDir = getwd(),
+  exportEnv = "effects_env"
+)
+
+```
+
+Finally, combine all component scores and calculate a single environmental risk metric:
+
+```{r}
+final_df <- list(climate_scores, exposure_scores, effects_scores) %>%
+  purrr::reduce(left_join, by = "FACILITYID") %>%
+  # remove rowwise
+  ungroup() %>%
+  mutate(
+    final_risk_score = rowMeans(select(., contains("score"))),
+    final_risk_score_pcntl = cume_dist(final_risk_score) * 100
+  )
+
+
+#save the final csv
+write_csv(final_df, paste0("outputs/final_df_", Sys.Date(), ".csv"))
+
+```

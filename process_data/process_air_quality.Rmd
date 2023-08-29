@@ -1,0 +1,67 @@
+---
+title: "Process raw downloads for PM2.5 and Ozone"
+author: "Caitlin C.Mothes, PhD"
+date: "2023-08-09"
+output: html_document
+---
+
+This workflow processes and cleans the raw zip folders downloaded from the SEDAC website.
+
+Set up for both workflows:
+
+```{r}
+library(terra)
+library(tidyverse)
+
+# paths containing input files
+pm25_path <- "data/raw/air_quality/pm2.5_sedac/"
+
+ozone_path <- "data/raw/air_quality/o3_daily/"
+
+```
+
+## Process Global PM2.5
+
+Annual global PM2.5 grids were [downloaded from SEDAC](https://sedac.ciesin.columbia.edu/data/set/sdei-global-annual-gwr-pm2-5-modis-misr-seawifs-aod-v4-gl-03/data-download) for the years 2014-2019. Downloads are formatted as a zip file for each year.
+
+Data Citations:
+
+Hammer, M. S., A. van Donkelaar, C. Li, A. Lyapustin, A. M. Sayer, N. C. Hsu, R. C. Levy, M. J. Garay, O. V. Kalashnikova, R. A. Kahn, M. Brauer, J. S. Apte, D. K. Henze, L. Zhang, Q. Zhang, B. Ford, J. R. Pierce, and R. V. Martin. 2022. Global Annual PM2.5 Grids from MODIS, MISR and SeaWiFS Aerosol Optical Depth (AOD), 1998-2019, V4.GL.03. Palisades, New York: NASA Socioeconomic Data and Applications Center (SEDAC). <https://doi.org/10.7927/fx80-4n39>. Accessed 09 Aug 2023.
+
+Hammer, M. S., A. van Donkelaar, C. Li, A. Lyapustin, A. M. Sayer, N. C. Hsu, R. C. Levy, M. J. Garay, O. V. Kalashnikova, R. A. Kahn, M. Brauer, J. S. Apte, D. K. Henze, L. Zhang, Q. Zhang, B. Ford, J. R. Pierce, and R. V. Martin. 2020. Global Estimates and Long-term Trends of Fine Particulate Matter Concentrations (1998-2018). Environmental Science & Technology 54 (13): 7879-7890. <https://doi.org/10.1021/acs.est.0c01764>.
+
+Unzip files for each year and move to processed folder:
+
+```{r}
+#list all zip files
+pm25_files <- list.files(path = pm25_path, pattern = ".zip", full.names = TRUE)
+
+# unzip all folders
+map(pm25_files, ~unzip(.x, exdir = pm25_path))
+
+# delete zip folders to save storage space
+file.remove(pm25_files)
+```
+
+## Process Daily O3 for CONUS
+
+Daily 03 Maximum 8-hour values were downloaded for the most recent 3 years (2014-2016) from the [SEDAC website.](https://sedac.ciesin.columbia.edu/data/set/aqdh-o3-concentrations-contiguous-us-1-km-2000-2016/data-download) Downloads are in the form of zip files for each month/year.
+
+Data Citations:
+
+Requia, W. J., Y. Wei, A. Shtein, C. Hultquist, X. Xing, Q. Di, R. Silvern, J. T. Kelly, P. Koutrakis, L. J. Mickley, M. P. Sulprizio, H. Amini, L. Shi, and J. Schwartz. 2021. Daily 8-Hour Maximum and Annual O3 Concentrations for the Contiguous United States, 1-km Grids, v1 (2000 - 2016). Palisades, New York: NASA Socioeconomic Data and Applications Center (SEDAC). <https://doi.org/10.7927/a4mb-4t86>. Accessed 10 Aug 2023.
+
+Requia, W. J., Q. Di, R. Silvern, J. T. Kelly, P. Koutrakis, L. J. Mickley, M. P. Sulprizio, H. Amini, L. Shi, and J. Schwartz. 2020. An Ensemble Learning Approach for Estimating High Spatiotemporal Resolution of Ground-level Ozone in the Contiguous U.S. Environmental Science & Technology 54(18):11037-11047. <https://doi.org/10.1021/acs.est.0c01791>.
+
+Unzip all folders
+
+```{r}
+#list all zip files
+ozone_files <- list.files(path = ozone_path, pattern = ".zip", full.names = TRUE)
+
+# unzip all folders
+map(ozone_files, ~unzip(.x, exdir = ozone_path))
+
+# delete zip folders to save storage space
+file.remove(ozone_files)
+```

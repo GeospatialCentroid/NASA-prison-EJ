@@ -1,0 +1,43 @@
+---
+title: "Download Daily 03 data for CONUS from SEDAC"
+author: "Caitlin Mothes"
+date: "2023-08-09"
+output: html_document
+---
+
+This workflow downloads the daily maximum 8-hour O3 Concentrations for the Contiguous U.S.from the SEDAC [Data Download site](https://sedac.ciesin.columbia.edu/data/set/aqdh-o3-concentrations-contiguous-us-1-km-2000-2016/data-download).
+
+Citations:
+
+Requia, W. J., Y. Wei, A. Shtein, C. Hultquist, X. Xing, Q. Di, R. Silvern, J. T. Kelly, P. Koutrakis, L. J. Mickley, M. P. Sulprizio, H. Amini, L. Shi, and J. Schwartz. 2021. Daily 8-Hour Maximum and Annual O3 Concentrations for the Contiguous United States, 1-km Grids, v1 (2000 - 2016). Palisades, New York: NASA Socioeconomic Data and Applications Center (SEDAC). <https://doi.org/10.7927/a4mb-4t86>.
+
+Requia, W. J., Q. Di, R. Silvern, J. T. Kelly, P. Koutrakis, L. J. Mickley, M. P. Sulprizio, H. Amini, L. Shi, and J. Schwartz. 2020. An Ensemble Learning Approach for Estimating High Spatiotemporal Resolution of Ground-level Ozone in the Contiguous U.S. Environmental Science & Technology 54(18):11037-11047. <https://doi.org/10.1021/acs.est.0c01791>.
+
+## Download Set Up
+
+First create a vector of all year/month combinations to download. Based on [NAAQS public health standards](https://www.epa.gov/criteria-air-pollutants/naaqs-table) we will just be analyzing the most recent 3 years of data.
+
+```{r}
+dates <-  2014:2016 %>% map(~ paste0(.x, c(paste0(0, 1:9), 10:12))) %>% unlist()
+```
+
+Now set up iteration to download the file for each year/month combo.
+
+```{r}
+#specify the folder path to save unzipped files to
+path <- "data/raw/air_quality/o3_daily/"
+
+for(i in 1:length(dates)){
+  
+  downloadLink <- "https://sedac.ciesin.columbia.edu/downloads/data/aqdh/aqdh-o3-concentrations-contiguous-us-1-km-2000-2016/aqdh-o3-concentrations-contiguous-us-1-km-2000-2016-201601-geotiff.zip"
+  
+   #download boundary 
+  temp1 <- tempfile()
+  download(downloadLink, dest = "dataset.zip", mode = "wb")
+  temp2 <- tempdir()
+  test <- unz(temp1, "dat")
+  
+}
+```
+
+This doesn't work
