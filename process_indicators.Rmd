@@ -128,8 +128,7 @@ Note that heat exposure and canopy cover were saved in the 'data/processed' fold
 flood_risk <- read_csv("outputs/flood_risk_2023-03-10.csv") %>%
   select(FACILITYID, flood_risk = flood_risk_percent)
 
-wildfire_risk <- read_csv("outputs/wildfire_risk_2023-08-29.csv") %>%
-  select(-geometry)
+wildfire_risk <- read_csv("outputs/wildfire_risk_2023-08-29.csv")
 
 heat_exp <- read_csv("data/processed/heat_exposure/lst_average.csv")
 
@@ -222,5 +221,5 @@ final_df <- list(climate_scores, exposure_scores, effects_scores) %>%
   )
 
 # save!
-write_csv(final_df, paste0("data/processed/final_df_", Sys.Date(), ".csv"))
+write_csv(final_df, paste0("outputs/final_df_", Sys.Date(), ".csv"))
 ```
