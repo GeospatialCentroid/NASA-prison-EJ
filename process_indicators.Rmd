@@ -1,35 +1,58 @@
-# code base to run individual environmental indicator functions
+---
+title: "Code to process all indicators and create final data frame"
+author: "Caitlin C. Mothes, PhD"
+date: "`r Sys.Date()`"
+output: html_document
+---
 
+## Process Indicators
 
+There are a total of 11 indicators in this code base. The majority of them are calculated in R and each have their own function (found in the 'R/' folder). Two indicators, heat exposure and canopy cover, were calculated using Google Earth Engine and each have a stand alone Python script in the 'python/' folder.
+
+This workflow is if you want to calculate the indicators individually. If you want to calculate indicators as their component scores, you can do so in the 'process_components.Rmd' file.
+
+First set up the environment with all the required libraries (using the 'setup.R' script to install and load packages) and the spatial boundaries (in `sf` format) of interest. In this workflow we are calculating these indicators for state and federal prisons, but **these functions will work on any sf polygon file in the U.S.**
+
+```{r}
 # set up environment -----------------
 source("setup.R")
 
 # read in processed prison polygons
 prisons <- read_sf("data/processed/prisons/study_prisons.shp")
+```
 
+#### Flood Risk
 
-# run individual indicator functions -------------------
-
-
+```{r}
 # flood risk (takes 1-2 days to run)
 flood_risk <- calc_flood_risk(sf_obj = prisons)
 
+```
 
+#### Wildfire Risk
+
+```{r}
 # wildfire risk
 wildfire_risk <- calc_wildfire_risk(
   sf_obj = prisons,
   file = "data/raw/wildfire_risk/whp2020_GeoTIF/"
 )
+```
 
+#### Ozone
 
+```{r}
 # ozone
 ozone <- calc_ozone(
   sf_obj = prisons, 
   folder = "data/raw/air_quality/o3_daily/",
   dist = 1000, years = c(2014, 2016)
 )
+```
 
+#### PM 2.5
 
+```{r}
 # pm2.5 (may change dataset, check for more recent years)
 pm25 <-
   calc_pm25(
@@ -39,46 +62,67 @@ pm25 <-
     years = c(2017, 2019),
     save = FALSE
   )
+```
 
+#### Pesticides
 
-# pesticides
+```{r}
 pesticides <- calc_pesticides(prisons, 
                              folder = "data/raw/pesticides/ferman-v1-pest-chemgrids-v1-01-geotiff",
                              dist = 1000, 
                              save = TRUE)
+```
 
+#### Traffic Proximity
 
+```{r}
 # traffic proximity (takes 1.5 days to run on Desktop comp)
 traffic_prox <- calc_traffic_proximity(
   sf_obj = prisons,
   file = "data/processed/traffic_proximity/aadt_2018.RData"
 )
+```
 
+#### Risk Management Plan (RMP) Facility Proximity
 
+```{r}
 # calculate Risk Management Plan (RMP) facility proximity
 rmp_prox <- calc_rmp_proximity(
   sf_obj = prisons,
   file = "data/raw/EPA_RMP/EPA_Emergency_Response_(ER)_Risk_Management_Plan_(RMP)_Facilities.csv"
 )
+```
 
+#### NPL/Superfund Facility Proximity
 
+```{r}
 # calculate NPL facility proximity
 npl_prox <- calc_npl_proximity(
   sf_obj = prisons,
   file = "data/processed/npl_addresses_geocoded_arc_sf.csv"
 )
+```
 
+#### Hazardous Waste Facility Proximity
 
+```{r}
 # calculate Haz waste facility proximity
 haz_prox <- calc_haz_waste_proximity(
   sf_obj = prisons,
   file = "data/processed/hazardous_waste/TSD_LQGs.csv"
 )
 
+```
 
-# component score calculation (pulling in files saved above) ---------------
+### Component Score Calculation
 
+Now to calculate component scores, you can run the following chunks of code. In this example I read in the output datasets from running each of the functions above. Since some of the functions take a long time to run, you may not create every object in a single session anyways.
 
+#### Climate Scores
+
+Note that heat exposure and canopy cover were saved in the 'data/processed' folder and exported from GEE instead of the 'outputs/' folder
+
+```{r}
 ## climate scores -------------
 
 flood_risk <- read_csv("outputs/flood_risk_2023-03-10.csv") %>%
@@ -109,10 +153,11 @@ climate_scores <- list(flood_risk, wildfire_risk, heat_exp, canopy_cover) %>%
   rowwise() %>%
   # calculate climate component score (average all indicator percentile values per prison
   mutate(climate_score = gm_mean(c_across(contains("pcntl"))))
+```
 
+#### Environmental Exposures Scores
 
-## env exposures scores ----------------
-
+```{r}
 ozone <- read_csv("outputs/ozone_2023-08-15.csv")
 
 pm25 <- read_csv("outputs/pm25_2023-08-10.csv")
@@ -136,10 +181,11 @@ exposure_scores <- list(ozone, pm25, pesticides, traffic) %>%
   mutate(exposure_score = gm_mean(c_across(contains("pcntl"))))
 
 
+```
 
-## env effects scores -------------------
+#### Environmental Effects Scores
 
-
+```{r}
 npl <- read_csv("data/processed/npl_prox_2023-05-16.csv")
 
 rmp <- read_csv("data/processed/rmp_prox_2023-05-16.csv")
@@ -159,11 +205,13 @@ effects_scores <- list(npl, rmp, haz) %>%
   rowwise() %>%
   # calculate climate component score (average all indicator percentile values per prison
   mutate(effects_score = gm_mean(c_across(contains("pcntl"))))
+```
 
+### Final Data Frame
 
+Now using the component scores data frames we can create a single, final data frame with an overall vulnerability index.
 
-# final data frame ----------------------------
-
+```{r}
 final_df <- list(climate_scores, exposure_scores, effects_scores) %>%
   purrr::reduce(left_join, by = "FACILITYID") %>%
   # remove rowwise
@@ -175,3 +223,4 @@ final_df <- list(climate_scores, exposure_scores, effects_scores) %>%
 
 # save!
 write_csv(final_df, paste0("data/processed/final_df_", Sys.Date(), ".csv"))
+```
