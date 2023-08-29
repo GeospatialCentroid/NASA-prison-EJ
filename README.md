@@ -4,7 +4,7 @@ This is the working repository for a NASA ROSES-21 A.49 Earth Science Applicatio
 
 This repository hosts the workflow used to carry out the spatial analysis, from data retrieval to producing the final dataset that is hosted (here). Below are further details on the repository structure, how to use the code base, and data sources.
 
-Forward any questions reguarding this project and code base to Caitlin Mothes ([ccmothes\@colostate.edu](mailto:ccmothes@colostate.edu){.email})
+Forward any questions reguarding this project and code base to Caitlin Mothes ([ccmothes\@colostate.edu](mailto:ccmothes@colostate.edu))
 
 <br/>
 
