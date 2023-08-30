@@ -130,7 +130,7 @@ flood_risk <- read_csv("outputs/flood_risk_2023-03-10.csv") %>%
 
 wildfire_risk <- read_csv("outputs/wildfire_risk_2023-08-29.csv")
 
-heat_exp <- read_csv("data/processed/heat_exposure/lst_average.csv")
+heat_exp <- read_csv("data/processed/heat_exposure/lst_average_2023-08-30.csv")
 
 canopy_cover <- read_csv("data/processed/canopy_cover/prison_canopy_AK.csv") %>%
   bind_rows(read_csv("data/processed/canopy_cover/prison_canopy_HI.csv")) %>%
