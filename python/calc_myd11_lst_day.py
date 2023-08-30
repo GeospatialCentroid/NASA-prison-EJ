@@ -12,8 +12,8 @@ ee.Initialize()
 
 
 # define date range
-startDate = "2012-01-01"
-endDate = "2022-12-31"
+startDate = "2013-01-01"
+endDate = "2023-08-31"
 
 # Define function to convert Kelvin to Celcius
 
@@ -136,7 +136,7 @@ daily_mean_lst = lst_day_processed.map(reduceRegions).flatten()
 task = ee.batch.Export.table.toDrive(
   collection=daily_mean_lst,
   folder="gee_exports",
-  description='prison_lst_daily_all',
+  description='prison_lst_daily_all_2023-08-30',
   fileFormat='CSV'
   #selectors=['FACILITYID', 'LST_Day_mean', 'system:index']
 )
