@@ -1,0 +1,186 @@
+---
+title: "Summary of findings"
+author: "Caitlin C. Mothes, PhD"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+This report presents some summary statistics from the final environmental burdens dataset for all state and federal U.S. prisons.
+
+```{r}
+# set up environment
+source("setup.R")
+
+
+df <- read_csv("outputs/final_df_2023-08-31.csv")
+
+# read in processed prison centroids to make maps (from 'process_prisons.R' script)
+prison_centroids <- read_sf("data/processed/prisons/prison_centroids.csv") %>% 
+  #need to convert facilityid to numeric to join w/ processed datasets
+  mutate(FACILITYID = as.numeric(FACILITYID),
+         long = as.numeric(long),
+         lat = as.numeric(lat))
+
+```
+
+Data exploration
+
+```{r}
+# find top 100 at risk and summarize
+
+df %>% 
+  arrange(desc(final_risk_score_pcntl)) %>% 
+  slice_head(n = 100) %>% 
+  group_by(STATE) %>% 
+  count()
+
+# 37% in CA, which makes up only 6% of US state and federal prisons
+
+# what prop of prisons in CA
+df %>% 
+  group_by(STATE) %>% 
+  count()
+# 106/1856 = 6%
+
+# look at top 50
+df %>% 
+  arrange(desc(final_risk_score_pcntl)) %>% 
+  slice_head(n = 50) %>% 
+  group_by(STATE) %>% 
+  count()
+
+# 30 in the top 50.....
+```
+
+Look at numbers for individual components
+
+```{r}
+#climate components
+df %>% 
+  arrange(desc(climate_score)) %>% 
+  slice_head(n = 100) %>% 
+  group_by(STATE) %>% 
+  count()
+# 24% in CA, FL, CA, and AZ make up over half (58%)
+
+#exposures comp
+df %>% 
+  arrange(desc(exposure_score)) %>% 
+  slice_head(n = 100) %>% 
+  group_by(STATE) %>% 
+  count()
+
+# CA (36%) MI (12) and WI (12), make up 60%
+
+#effects comp
+df %>% 
+  arrange(desc(effects_score)) %>% 
+  slice_head(n = 100) %>% 
+  group_by(STATE) %>% 
+  count() %>% 
+  arrange(desc(n))
+
+#16% in MD 10% in FL
+```
+
+Maps
+
+```{r}
+library(usmap)
+
+df_map <- df %>% 
+  #join to centroid points
+  left_join(prison_centroids, by = "FACILITYID")
+
+prisons_map <- usmap::usmap_transform(data = df_map, input_names = c("long", "lat"))
+
+```
+
+Climate Map:
+
+```{r}
+# climate map
+plot_usmap(color = "#b3b3b3", size = 0.35) +
+  geom_point(data = prisons_map, aes(x = x, y = y, size = climate_score, color = climate_score),
+             alpha = 0.6) +
+  scale_colour_gradient(low = "#9dbd99", high = "#114a0a", limits = c(0,100))+
+  scale_radius(range = c(0.1, 4), limits = c(0,100))+
+  labs(title = "Climate Component Score")+
+  theme(plot.margin = margin(1,1,1,1,"cm"),
+        legend.margin = margin(0,0,0,0,"cm"),
+        legend.key.size = unit(0.5, "cm"),
+        legend.title = element_text(family = "sans", face = "bold",size = 12),
+        legend.text = element_text(family = "sans",size = 9),
+        legend.position = c(-0.06,0.10),
+        legend.spacing = unit(0, "cm"),
+        plot.title = element_text(size = 16, family = "sans"))+
+  guides(color= guide_legend(title = "Prison\nPercentile"), size=guide_legend(title = "Prison\nPercentile"))
+
+```
+
+Exposures map
+
+```{r}
+plot_usmap(color = "#b3b3b3", size = 0.35) +
+  geom_point(data = prisons_map, aes(x = x, y = y, size = exposure_score, color = exposure_score),
+             alpha = 0.6) +
+  scale_colour_gradient(low = "#baa9c7", high = "#410e69", limits = c(0,100))+
+  scale_radius(range = c(0.1, 4), limits = c(0,100))+
+  labs(title = "Environmental Exposures Component Score")+
+  theme(plot.margin = margin(1,1,1,1,"cm"),
+        legend.margin = margin(0,0,0,0,"cm"),
+        legend.key.size = unit(0.5, "cm"),
+        legend.title = element_text(family = "sans", face = "bold",size = 12),
+        legend.text = element_text(family = "sans",size = 9),
+        legend.position = c(-0.06,0.10),
+        legend.spacing = unit(0, "cm"),
+        plot.title = element_text(size = 16, family = "sans"))+
+  guides(color= guide_legend(title = "Prison\nPercentile"), size=guide_legend(title = "Prison\nPercentile"))
+
+```
+
+Effects Map
+
+```{r}
+plot_usmap(color = "#b3b3b3", size = 0.35) +
+  geom_point(data = prisons_map, aes(x = x, y = y, size = effects_score, color = effects_score),
+             alpha = 0.5) +
+  scale_colour_gradient(low = "#f7dbb7", high = "#fa8602", limits = c(0,100))+
+  scale_radius(range = c(0.1, 4), limits = c(0,100))+
+  labs(title = "Environmental Effects Component Score")+
+  theme(plot.margin = margin(1,1,1,1,"cm"),
+        legend.margin = margin(0,0,0,0,"cm"),
+        legend.key.size = unit(0.5, "cm"),
+        legend.title = element_text(family = "sans", face = "bold",size = 12),
+        legend.text = element_text(family = "sans",size = 9),
+        legend.position = c(-0.06,0.10),
+        legend.spacing = unit(0, "cm"),
+        plot.title = element_text(size = 16, family = "sans"))+
+  guides(color= guide_legend(title = "Prison\nPercentile"), size=guide_legend(title = "Prison\nPercentile"))
+
+
+
+
+```
+
+Final risk score
+
+```{r}
+# final risk score
+plot_usmap(color = "#b3b3b3", size = 0.35) +
+  geom_point(data = prisons_map, aes(x = x, y = y, size = final_risk_score_pcntl, color = final_risk_score_pcntl),
+             alpha = 0.5) +
+  scale_colour_gradient(low = "lightgray", high = "black", limits = c(0,100))+
+  scale_radius(range = c(0.1, 4), limits = c(0,100))+
+  labs(title = "Environmental Vulnerability Score")+
+  theme(plot.margin = margin(1,1,1,1,"cm"),
+        legend.margin = margin(0,0,0,0,"cm"),
+        legend.key.size = unit(0.5, "cm"),
+        legend.title = element_text(family = "sans", face = "bold",size = 12),
+        legend.text = element_text(family = "sans",size = 9),
+        legend.position = c(-0.06,0.10),
+        legend.spacing = unit(0, "cm"),
+        plot.title = element_text(size = 16, family = "sans"))+
+  guides(color= guide_legend(title = "Prison\nPercentile"), size=guide_legend(title = "Prison\nPercentile"))
+
+```

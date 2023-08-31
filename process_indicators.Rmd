@@ -130,7 +130,7 @@ flood_risk <- read_csv("outputs/flood_risk_2023-03-10.csv") %>%
 
 wildfire_risk <- read_csv("outputs/wildfire_risk_2023-08-29.csv")
 
-heat_exp <- read_csv("data/processed/heat_exposure/lst_average.csv")
+heat_exp <- read_csv("data/processed/heat_exposure/lst_average_2023-08-30.csv")
 
 canopy_cover <- read_csv("data/processed/canopy_cover/prison_canopy_AK.csv") %>%
   bind_rows(read_csv("data/processed/canopy_cover/prison_canopy_HI.csv")) %>%
@@ -218,8 +218,15 @@ final_df <- list(climate_scores, exposure_scores, effects_scores) %>%
   mutate(
     final_risk_score = rowMeans(select(., contains("score"))),
     final_risk_score_pcntl = cume_dist(final_risk_score) * 100
-  )
+  ) %>% 
+  # join with original prison facility metadata
+  mutate(FACILITYID = as.character(FACILITYID)) %>% 
+  left_join(prisons, by = "FACILITYID")
 
-# save!
-write_csv(final_df, paste0("outputs/final_df_", Sys.Date(), ".csv"))
+# save as shapefile and csv
+final_df %>% st_as_sf() %>% write_sf(paste0("outputs/final_df_", Sys.Date(), ".shp"))
+
+final_df %>% 
+  select(-geometry) %>% 
+  write_csv(paste0("outputs/final_df_", Sys.Date(), ".csv"))
 ```

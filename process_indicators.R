@@ -171,7 +171,14 @@ final_df <- list(climate_scores, exposure_scores, effects_scores) %>%
   mutate(
     final_risk_score = rowMeans(select(., contains("score"))),
     final_risk_score_pcntl = cume_dist(final_risk_score) * 100
-  )
+  )%>% 
+  # join with original prison facility metadata
+  mutate(FACILITYID = as.character(FACILITYID)) %>% 
+  left_join(prisons, by = "FACILITYID")
 
-# save!
-write_csv(final_df, paste0("data/processed/final_df_", Sys.Date(), ".csv"))
+# save as shapefile and csv
+final_df %>% st_as_sf() %>% write_sf(paste0("outputs/final_df_", Sys.Date(), ".shp"))
+
+final_df %>% 
+  select(-geometry) %>% 
+  write_csv(paste0("outputs/final_df_", Sys.Date(), ".csv"))
