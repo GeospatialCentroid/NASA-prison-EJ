@@ -22,15 +22,15 @@ Indicator Metatdata
 <td>Spatial resolution (if raster)</td>
 </tr>
 <tr class="even">
-<td>Heat index</td>
+<td>Heat exposure</td>
 <td><a
 href="https://developers.google.com/earth-engine/datasets/catalog/MODIS_061_MYD11A1#description">MODIS
 daily land surface temperature</a></td>
 <td>python/calc_myd11_lst_day.py</td>
 <td>procces_data/process_lst.R</td>
 <td>Mean daily LST for summer months (June-August) from the last 10
-years (2012-2022) averaged within prison boundaries.</td>
-<td>2012 - 2022</td>
+years (2013-2023) averaged within prison boundaries.</td>
+<td>2013 - 2023</td>
 <td>1 km</td>
 </tr>
 <tr class="odd">
