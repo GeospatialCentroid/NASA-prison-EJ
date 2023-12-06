@@ -177,7 +177,7 @@ final_df <- list(climate_scores, exposure_scores, effects_scores) %>%
   left_join(prisons, by = "FACILITYID")
 
 # save as shapefile and csv
-final_df %>% st_as_sf() %>% write_sf(paste0("outputs/final_df_", Sys.Date(), ".shp"))
+final_df %>% st_as_sf() %>% st_write(paste0("outputs/final_df_", Sys.Date(), ".gpkg", driver="GPKG"))
 
 final_df %>% 
   select(-geometry) %>% 
