@@ -1,3 +1,5 @@
+[![DOI](https://zenodo.org/badge/DOI/10.5281/zenodo.8306856.svg)](https://doi.org/10.5281/zenodo.8306856)
+
 # Mapping environmental injustices within the U.S. prison system
 
 This is the working repository for a NASA ROSES-21 A.49 Earth Science Applications: Equity and Environmental Justice funded project (Award No 80NSSC22K1465) titled "Leveraging Earth science data to heighten awareness of environmental injustices within the U.S. prison system".
