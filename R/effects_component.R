@@ -69,7 +69,7 @@ effects_component <-
     write_csv(df,
               file = paste0(out_path, "/effects_component_", Sys.Date(), ".csv"))
     
-    print("Effects component data saved to", out_path)
+    print(paste("Effects component data saved to", out_path))
   }
   
   return(df)
