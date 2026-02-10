@@ -1,0 +1,74 @@
+---
+title: "process_prisons"
+output: html_document
+---
+
+## Process raw prison dataset to study sites
+
+```{r}
+source("setup.R")
+```
+
+Read in spatial data
+```{r}
+prisons <- read_sf("data/phase2/raw/Prisons/Prison_Boundaries.shp") %>% 
+  #filter out just state and federal
+  filter(TYPE %in% c("STATE", "FEDERAL")) %>% 
+  #filter just U.S. (not territories)
+  filter(COUNTRY == "USA") %>% 
+  # filter out prisons with 0 or NA population and that are designated as "closed"
+  filter(POPULATION > 0) %>% filter(STATUS == "OPEN")
+```
+
+Compare to previous Prison dataset:
+```{r}
+prisons_old <- read_sf("data/phase1/raw/Prisons/Prison_Boundaries.shp") %>% 
+  #filter out just state and federal
+  filter(TYPE %in% c("STATE", "FEDERAL")) %>% 
+  #filter just U.S. (not territories)
+  filter(COUNTRY == "USA") %>% 
+  # filter out prisons with 0 or NA population and that are designated as "closed"
+  filter(POPULATION > 0) %>% 
+  filter(STATUS == "OPEN")
+```
+
+There are a lot less prisons in the updated dataset using our previous filter options. View the mismatches:
+```{r}
+prison_add <- prisons %>% filter(!FACILITYID %in% prisons_old$FACILITYID)
+
+prison_drop <- prisons_old %>% filter(!FACILITYID %in% prisons$FACILITYID)
+```
+
+Explore prisons dropped:
+```{r}
+# any pattern in states
+prison_drop %>% 
+  st_drop_geometry() %>% 
+  group_by(STATE) %>% 
+  count() %>% 
+  arrange(-n)
+
+# hundreds in FL and TX
+
+# any pattern in juristiction
+prison_drop %>% 
+  st_drop_geometry() %>% 
+  group_by(TYPE) %>% 
+  count() %>% 
+  arrange(-n)
+
+# almost all state prisons...
+```
+
+
+See if dropped prisons are in the new dataset at all
+```{r}
+prisons_new_raw <- read_sf("data/phase2/raw/Prisons/Prison_Boundaries.shp")
+
+x <- prisons_new_raw %>% 
+  filter(FACILITYID %in% prison_drop$FACILITYID)
+
+
+```
+
+
