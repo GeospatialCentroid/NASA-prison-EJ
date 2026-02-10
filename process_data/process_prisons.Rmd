@@ -9,18 +9,40 @@ output: html_document
 source("setup.R")
 ```
 
-Read in spatial data
+### Read in HIFLD dataset
+
+*Last updated Aug 2025*
+
 ```{r}
-prisons <- read_sf("data/phase2/raw/Prisons/Prison_Boundaries.shp") %>% 
+prisons <- read_sf("data/phase2/raw/prisons/Prison_Boundaries.shp") %>% 
   #filter out just state and federal
   filter(TYPE %in% c("STATE", "FEDERAL")) %>% 
   #filter just U.S. (not territories)
   filter(COUNTRY == "USA") %>% 
   # filter out prisons with 0 or NA population and that are designated as "closed"
-  filter(POPULATION > 0) %>% filter(STATUS == "OPEN")
+  #filter(POPULATION > 0) %>% no longer using population as a filter
+  filter(STATUS == "OPEN")
+
+# save as geopackage
+write_sf(prisons, "data/phase2/processed/prisons/study_prisons.gpkg")
+
+# Create centroids and save as csv with lat/long for data viz purposes
+prisons %>% 
+  st_make_valid() %>% # fix any invalid polygon geometries
+  st_centroid() %>% 
+  mutate(long = unlist(map(.$geometry,1)),
+         lat = unlist(map(.$geometry,2))) %>%
+  st_drop_geometry() %>% 
+  select(FACILITYID, NAME, long, lat) %>% 
+  write_csv("data/phase2/processed/prisons/prison_centroids.csv")
 ```
 
-Compare to previous Prison dataset:
+------------------------------------------------------------------------
+
+## Comparisons with previous version:
+
+2024 dataset used in Phase 1:
+
 ```{r}
 prisons_old <- read_sf("data/phase1/raw/Prisons/Prison_Boundaries.shp") %>% 
   #filter out just state and federal
@@ -33,6 +55,7 @@ prisons_old <- read_sf("data/phase1/raw/Prisons/Prison_Boundaries.shp") %>%
 ```
 
 There are a lot less prisons in the updated dataset using our previous filter options. View the mismatches:
+
 ```{r}
 prison_add <- prisons %>% filter(!FACILITYID %in% prisons_old$FACILITYID)
 
@@ -40,6 +63,7 @@ prison_drop <- prisons_old %>% filter(!FACILITYID %in% prisons$FACILITYID)
 ```
 
 Explore prisons dropped:
+
 ```{r}
 # any pattern in states
 prison_drop %>% 
@@ -48,7 +72,6 @@ prison_drop %>%
   count() %>% 
   arrange(-n)
 
-# hundreds in FL and TX
 
 # any pattern in juristiction
 prison_drop %>% 
@@ -60,10 +83,10 @@ prison_drop %>%
 # almost all state prisons...
 ```
 
+See if dropped prisons are in the new dataset at all and view comparisons
 
-See if dropped prisons are in the new dataset at all
 ```{r}
-prisons_new_raw <- read_sf("data/phase2/raw/Prisons/Prison_Boundaries.shp")
+prisons_new_raw <- read_sf("data/phase2/raw/prisons/Prison_Boundaries.shp")
 
 x <- prisons_new_raw %>% 
   filter(FACILITYID %in% prison_drop$FACILITYID)
@@ -71,4 +94,4 @@ x <- prisons_new_raw %>%
 
 ```
 
-
+Ok, main difference is these prisons are still categorized as OPEN but the population data went from a value to -999. Move forward disregarding the POPULATION column due to high uncertainty.
