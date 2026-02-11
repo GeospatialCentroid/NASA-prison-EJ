@@ -21,14 +21,15 @@ prisons <- read_sf("data/phase2/raw/prisons/Prison_Boundaries.shp") %>%
   filter(COUNTRY == "USA") %>% 
   # filter out prisons with 0 or NA population and that are designated as "closed"
   #filter(POPULATION > 0) %>% no longer using population as a filter
-  filter(STATUS == "OPEN")
+  filter(STATUS == "OPEN") %>% 
+  # some invalid geometries, fix that
+  st_make_valid()
 
 # save as geopackage
 write_sf(prisons, "data/phase2/processed/prisons/study_prisons.gpkg")
 
 # Create centroids and save as csv with lat/long for data viz purposes
 prisons %>% 
-  st_make_valid() %>% # fix any invalid polygon geometries
   st_centroid() %>% 
   mutate(long = unlist(map(.$geometry,1)),
          lat = unlist(map(.$geometry,2))) %>%
