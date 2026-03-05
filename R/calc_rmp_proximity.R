@@ -16,13 +16,11 @@ calc_rmp_proximity <- function(sf_obj,
                      save = TRUE,
                      out_path = "outputs/") {
   rmp <- read_csv(file) %>%
-    st_as_sf(coords = c("LONGITUDE8", "LATITUDE83"), crs = 4269) %>%
+    st_as_sf(coords = c("Lng", "Lat"), crs = 4269) %>%
     st_transform(crs = st_crs(sf_obj))
-
 
   rmp_prox <- effects_proximity(sf_obj, rmp, dist = dist) %>%
     rename(rmp_prox = proximity_score)
-
 
   if (save == TRUE) {
     write_csv(rmp_prox, file = paste0(out_path, "/rmp_proximity_", Sys.Date(), ".csv"))
