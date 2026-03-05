@@ -19,7 +19,6 @@ calc_rmp_proximity <- function(sf_obj,
     st_as_sf(coords = c("Lng", "Lat"), crs = 4269) %>%
     st_transform(crs = st_crs(sf_obj))
 
-  # return(rmp)
   rmp_prox <- effects_proximity(sf_obj, rmp, dist = dist) %>%
     rename(rmp_prox = proximity_score)
 
