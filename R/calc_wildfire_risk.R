@@ -24,9 +24,9 @@ calc_wildfire_risk <- function(sf_obj,
   # read in rasters from file
   ## process individual files for CONUS, AK and HI ----
   
-  wf_conus <- rast(paste0(file, "whp2020_cnt_conus.tif"))
-  wf_ak <- rast(paste0(file, "whp2020_cnt_ak.tif"))
-  wf_hi <- rast(paste0(file, "whp2020_cnt_hi.tif"))
+  wf_conus <- rast(paste0(file, "whp2023_cnt_conus.tif"))
+  wf_ak <- rast(paste0(file, "whp2023_cnt_ak.tif"))
+  wf_hi <- rast(paste0(file, "whp2023_cnt_hi.tif"))
   
   
   # need to separate spatial file for conus, ak and hi and project to matching raster
@@ -49,7 +49,8 @@ calc_wildfire_risk <- function(sf_obj,
       mutate(wildfire_risk = terra::extract(raster_obj, prison_obj, fun = "mean", na.rm = TRUE)) %>%
       unnest(cols = wildfire_risk) %>%
       select(!ID) %>%
-      rename("wildfire_risk" = names(raster_obj))
+      rename("wildfire_risk" = names(raster_obj)) %>% 
+      st_drop_geometry()
     
     return(df)
   }
@@ -61,13 +62,12 @@ calc_wildfire_risk <- function(sf_obj,
   prisons_ak_wf <- extract_risk(prisons_ak, wf_ak)
   
   prisons_hi_wf <- extract_risk(prisons_hi, wf_hi)
-  
+
   
   # Resultant wildfire calculation dataset
   prisons_wf <-
     bind_rows(prisons_conus_wf, prisons_ak_wf, prisons_hi_wf) %>%
-    dplyr::select(FACILITYID, wildfire_risk) %>% 
-    st_drop_geometry()
+    dplyr::select(FACILITYID, wildfire_risk)
   
   
   if (save == TRUE) {

@@ -6,7 +6,7 @@ library(furrr) # Parallel iterations for NPL geocoding
 
 
 # Read in NPL dataset
-npl <- readr::read_csv("data/raw/NPL/npl_sites.csv", skip = 13) %>%
+npl <- readr::read_csv("data/phase2/raw/NPL/npl_sites.csv", skip = 13) %>%
   janitor::clean_names() %>%
   mutate(zip_code = str_sub(zip_code, 2, 6))
 
@@ -19,8 +19,7 @@ plan("multisession", workers = 8)
 ## Arcgis
 npl_geo_address_df <- npl %>%
   unite(full_address, c("street_address", "city", "state"), sep = ", ") %>%
-  unite(full_address, c("full_address", "zip_code"), sep = " ") %>%
-  filter(!(epa_id %in% c("AZD094524097", "MOD981507585"))) # remove rows with weird characters
+  unite(full_address, c("full_address", "zip_code"), sep = " ") 
 
 # Prep address list to geocode using ArcGIS Method
 npl_geo_address <- as.list(npl_geo_address_df$full_address)
@@ -48,4 +47,4 @@ npl_arc_sf <- npl_arc_df %>%
   st_as_sf(coords = c("longitude", "latitude"), crs = 4326)
 
 # Save geocoded simple features
-st_write(npl_arc_sf, "data/processed/npl_addresses_geocoded_arc_sf.csv")
+st_write(npl_arc_sf, "data/phase2/processed/npl_addresses_geocoded_arc_sf.csv")
