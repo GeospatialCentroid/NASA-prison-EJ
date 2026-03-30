@@ -8,8 +8,6 @@
 #' output_dir The filepath to the folder all PM2.5 rasters will be saved
 #' 
 
-library(ncdf4) #required to manipulate NetCDF files
-
 input_dir <-  'data/phase2/raw/PM2.5'
 output_dir <-  'data/phase2/processed/PM2.5'
 
