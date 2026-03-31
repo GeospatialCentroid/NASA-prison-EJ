@@ -18,7 +18,7 @@ First set up the environment with all the required libraries (using the 'setup.R
 source("setup.R")
 
 # read in processed prison polygons
-prisons <- read_sf("data/processed/prisons/study_prisons.shp")
+prisons <- read_sf("data/phase2/processed/prisons/study_prisons.gpkg")
 ```
 
 #### Flood Risk
@@ -35,7 +35,7 @@ flood_risk <- calc_flood_risk(sf_obj = prisons)
 # wildfire risk
 wildfire_risk <- calc_wildfire_risk(
   sf_obj = prisons,
-  file = "data/raw/wildfire_risk/whp2020_GeoTIF/"
+  file = "data/phase2/raw/wildfire_risk/Data/whp2023_GeoTIF/"
 )
 ```
 
@@ -57,10 +57,10 @@ ozone <- calc_ozone(
 pm25 <-
   calc_pm25(
     sf_obj = prisons,
-    folder = "data/raw/air_quality/pm2.5_sedac/",
+    folder = "data/phase2/processed/PM2.5",
     dist = 1000,
-    years = c(2017, 2019),
-    save = FALSE
+    years = c(2021, 2023),
+    save = TRUE
   )
 ```
 
@@ -89,8 +89,9 @@ traffic_prox <- calc_traffic_proximity(
 # calculate Risk Management Plan (RMP) facility proximity
 rmp_prox <- calc_rmp_proximity(
   sf_obj = prisons,
-  file = "data/raw/EPA_RMP/EPA_Emergency_Response_(ER)_Risk_Management_Plan_(RMP)_Facilities.csv"
+  file = "data/phase2/raw/RMP/EPA RMP Spreadsheets — The Data Liberation Project - Facilities.csv"
 )
+
 ```
 
 #### NPL/Superfund Facility Proximity
@@ -99,7 +100,7 @@ rmp_prox <- calc_rmp_proximity(
 # calculate NPL facility proximity
 npl_prox <- calc_npl_proximity(
   sf_obj = prisons,
-  file = "data/processed/npl_addresses_geocoded_arc_sf.csv"
+  file = "data/phase2/processed/NPL/NPL_arc_geocode.shp"
 )
 ```
 
@@ -109,7 +110,7 @@ npl_prox <- calc_npl_proximity(
 # calculate Haz waste facility proximity
 haz_prox <- calc_haz_waste_proximity(
   sf_obj = prisons,
-  file = "data/processed/hazardous_waste/TSD_LQGs.csv"
+  file = "data/phase2/processed/hazardous_waste/TSD_LQGs.csv"
 )
 
 ```

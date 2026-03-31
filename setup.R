@@ -16,7 +16,9 @@ package_load <- function(x) {
 packages <- c('tidyverse',
               'sf',
               'terra',
-              'vroom'
+              'vroom',
+              'tools',
+              'ncdf4'
 )
 
 ## load in packages

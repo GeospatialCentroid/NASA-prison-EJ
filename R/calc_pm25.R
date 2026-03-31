@@ -15,7 +15,7 @@ calc_pm25 <-
   function(sf_obj,
            folder,
            dist = 1000,
-           years = c(2017, 2019),
+           years = c(2021, 2023),
            save = TRUE,
            out_path = 'outputs/') {
     

@@ -17,7 +17,7 @@ Also need to load in the spatial (sf) object to perform calculations on:
 
 ```{r}
 # read in processed prison boundaries
-prisons <- read_sf("data/processed/prisons/study_prisons.shp")
+prisons <- read_sf("data/phase2/processed/prisons/study_prisons.gpkg")
 ```
 
 All indicator functions are grouped into three components: climate, environmental exposures and environmental effects. To learn more about this methodology and these component groupings you can read the project description (proposal submitted to and funded by NASA) in the 'doc/' folder titled "NASA_EEJ_STM_Mothes.pdf".
