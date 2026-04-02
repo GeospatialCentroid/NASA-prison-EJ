@@ -4,7 +4,7 @@ Indicator Metatdata
 <table style="width:99%;">
 <colgroup>
 <col style="width: 8%" />
-<col style="width: 30%" />
+<col style="width: 32%" />
 <col style="width: 5%" />
 <col style="width: 6%" />
 <col style="width: 31%" />
@@ -25,29 +25,27 @@ Indicator Metatdata
 </tr>
 <tr>
 <td>Heat index</td>
-<td><a
-href="https://developers.google.com/earth-engine/datasets/catalog/MODIS_061_MYD11A1#description">MODIS
-daily land surface temperature</a></td>
-<td>python/calc_myd11_lst_day.py</td>
-<td>procces_data/process_lst.R</td>
-<td>Mean daily LST for summer months (June-August) from the last 10
-years (2012-2022) averaged within prison boundaries.</td>
-<td>2012 - 2022</td>
-<td>1 km</td>
+<td>Landsat 8/9 Collection 2 Level-2 Surface Temperature (ST_B10)</td>
+<td>python/calc_lst_landsat.py</td>
 <td></td>
+<td>Mean LST for summer months (June-August) from the last three years
+(2022-2025) averaged within prison boundaries.</td>
+<td>2022 - 2025</td>
+<td>30 m</td>
+<td>Yes</td>
 </tr>
 <tr>
 <td>Canopy cover</td>
 <td><a
-href="https://developers.google.com/earth-engine/datasets/catalog/USGS_NLCD_RELEASES_2016_REL">USGS
+href="https://developers.google.com/earth-engine/datasets/catalog/USGS_NLCD_RELEASES_2023_REL_TCC_v2023-5">USGS
 National Land Cover Database</a></td>
 <td>python/calc_canopy_cover.py</td>
 <td></td>
 <td>Average percent canopy cover within prison boundaries + 1km
 buffer.</td>
-<td>2016</td>
+<td>2023</td>
 <td>30 m</td>
-<td></td>
+<td>Yes</td>
 </tr>
 <tr>
 <td>Wildfire risk</td>
@@ -72,9 +70,9 @@ National Flood Hazard Layer</a></td>
 <td>Percentage of each prison boundary + 1km buffer that is covered by a
 high risk flood zone (Zones A and Z; at least a one percent chance of
 flooding annually)</td>
-<td>August 2021</td>
+<td>2026</td>
 <td></td>
-<td></td>
+<td>Yes</td>
 </tr>
 <tr>
 <td>Ozone</td>
@@ -91,42 +89,42 @@ boundaries + 1km buffer</td>
 </tr>
 <tr>
 <td>PM 2.5</td>
-<td><a
-href="https://sedac.ciesin.columbia.edu/data/set/aqdh-pm2-5-concentrations-contiguous-us-1-km-2000-2016">SEDAC
-Annual PM2.5 Concentrations for CONUS</a></td>
+<td><a href="https://sites.wustl.edu/acag/surface-pm2-5/">Wash U
+St. Louis - van Donkelaar et al. 2024. North American Regional
+Estimates</a></td>
 <td>calc_pm25.R</td>
 <td></td>
-<td>Average annual PM2.5 levels for 2015 and 2016 within prison
-boundaries + 1km buffer</td>
-<td>2015-2016</td>
+<td>Average annual PM2.5 levels within prison boundaries + 1km
+buffer</td>
+<td>2021-2023</td>
 <td>1 km</td>
-<td></td>
+<td>Yes</td>
 </tr>
 <tr>
 <td>Traffic volume and proximity</td>
 <td><a
-href="https://www.fhwa.dot.gov/policyinformation/hpms/shapefiles.cfm">FHA’s
+href="https://www.fhwa.dot.gov/policyihttps://geodata.bts.gov/datasets/483bd180fe814872b82a66dbf65e25f0nformation/hpms/shapefiles.cfm">FHA’s
 Annual Average Daily Traffic</a></td>
 <td>calc_traffic_proximity.R</td>
 <td>process_data/process_traffic.R</td>
 <td>Count of vehicles (AADT, avg. annual daily traffic) at major roads
 within 500 meters, divided by distance in meters</td>
-<td>2018</td>
+<td>2023</td>
 <td></td>
-<td></td>
+<td>Yes</td>
 </tr>
 <tr>
 <td>Pesticide use</td>
 <td><a
-href="https://sedac.ciesin.columbia.edu/data/set/ferman-v1-pest-chemgrids-v1-01">SEDAC
-Global Pesticide Grids</a></td>
+href="https://www.earthdata.nasa.gov/data/catalog/sedac-ciesin-sedac-fermanv1-pestg-v1.01-1.01">Global
+PEST-CHEMGRIDS V1.01</a> Maggie et al. 2020.</td>
 <td>calc_pesticides.R</td>
 <td></td>
-<td>The total pesticide application from 2015 in kg/ha*yr averaged over
+<td>The total pesticide application from 2025 in kg/ha*yr averaged over
 prison boundaries + 1km buffer.</td>
-<td>2015</td>
+<td>2025</td>
 <td>~ 10 km (5 arc-minute)</td>
-<td></td>
+<td>Yes</td>
 </tr>
 <tr>
 <td>Superfund/NPL proximity</td>
