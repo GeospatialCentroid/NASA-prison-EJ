@@ -25,7 +25,12 @@ prisons <- read_sf("data/phase2/processed/prisons/study_prisons.gpkg")
 
 ```{r}
 # flood risk (takes 1-2 days to run)
-flood_risk <- calc_flood_risk(sf_obj = prisons)
+flood_risk <- calc_flood_risk(
+  data = prisons,
+  dist = 1000,
+  save = TRUE,
+  output_dir = "outputs/"
+)
 
 ```
 
@@ -67,10 +72,10 @@ pm25 <-
 #### Pesticides
 
 ```{r}
-pesticides <- calc_pesticides(prisons, 
-                             folder = "data/raw/pesticides/ferman-v1-pest-chemgrids-v1-01-geotiff",
-                             dist = 1000, 
-                             save = TRUE)
+pesticides <- calc_pesticides(prisons,
+                              path = "data/phase2/raw/pesticide/EPest_county_estimates_2019.txt",
+                              save = TRUE,
+                              output_dir = "outputs/")
 ```
 
 #### Traffic Proximity
