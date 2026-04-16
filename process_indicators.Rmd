@@ -84,7 +84,7 @@ pesticides <- calc_pesticides(prisons,
 # traffic proximity (takes 1.5 days to run on Desktop comp)
 traffic_prox <- calc_traffic_proximity(
   sf_obj = prisons,
-  file = "data/processed/traffic_proximity/aadt_2018.RData"
+  file = "data/phase2/processed/traffic/aadt_2023.RData"
 )
 ```
 
