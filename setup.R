@@ -18,7 +18,8 @@ packages <- c('tidyverse',
               'terra',
               'vroom',
               'tools',
-              'ncdf4'
+              'ncdf4',
+              'janitor'
 )
 
 ## load in packages
