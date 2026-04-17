@@ -188,7 +188,7 @@ calc_ozone <- function(
   # -- 9. Save ------------------------------------------------------------------
   if (save) {
     if (!dir.exists(out_path)) dir.create(out_path, recursive = TRUE)
-    out_file <- file.path(out_path, paste0("ozone_faqsd_", Sys.Date(), ".csv"))
+    out_file <- file.path(out_path, paste0("ozone_", Sys.Date(), ".csv"))
     readr::write_csv(result, file = out_file)
     message(sprintf("Saved: %s", out_file))
   }
