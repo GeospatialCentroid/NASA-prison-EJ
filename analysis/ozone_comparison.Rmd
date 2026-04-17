@@ -1,0 +1,340 @@
+---
+title: "Ozone Exposure Comparison: SEDAC vs. FAQSD"
+author: "Environmental Justice Prison Study"
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    theme: flatly
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo    = TRUE,
+  message = FALSE,
+  warning = FALSE,
+  fig.width  = 9,
+  fig.height = 6
+)
+```
+
+## Overview
+
+This document compares mean ozone exposure values (ppb) for prison facilities between two data sources:
+
+- **Old (SEDAC)**: `ozone_2023-08-15.csv` — 1km gridded MDA8 ozone, SEDAC product
+- **New (FAQSD)**: `ozone_faqsd_2026-04-17.csv` — EPA FAQSD Downscaler, 3-year average (2019, 2021, 2022) of annual 4th-highest MDA8 per census tract centroid
+
+Both represent annual 8-hour maximum ozone in ppb. The FAQSD product is preferred for this study because it performs better for rural facilities distant from monitors.
+
+---
+
+## 1. Load Data
+
+```{r load}
+source('setup.R')
+library(scales)
+
+# prison data for mapping
+prisons <- read_sf("data/phase2/processed/prisons/study_prisons.gpkg")
+
+old <- read_csv("outputs/ozone_2023-08-15.csv") |>
+  rename(ozone_old = mean_ozone)
+
+new <- read_csv("outputs/ozone_faqsd_2026-04-17.csv") |>
+  rename(ozone_new = mean_ozone)
+
+cat("Old dataset: ", nrow(old), "facilities\n")
+cat("New dataset: ", nrow(new), "facilities\n")
+```
+
+---
+
+## 2. Dataset Coverage
+
+```{r coverage}
+n_old_only <- length(setdiff(old$FACILITYID, new$FACILITYID))
+n_new_only <- length(setdiff(new$FACILITYID, old$FACILITYID))
+n_both     <- length(intersect(old$FACILITYID, new$FACILITYID))
+
+tibble(
+  Group               = c("In both datasets", "Old only (SEDAC)", "New only (FAQSD)"),
+  `Facility count`    = c(n_both, n_old_only, n_new_only)
+) |>
+  knitr::kable(caption = "Facility coverage across datasets")
+```
+
+---
+
+## 3. Merge & Compute Differences
+
+```{r merge}
+merged <- old |>
+  inner_join(new |> select(FACILITYID, ozone_new, dist_to_tract_m), 
+             by = "FACILITYID") |>
+  filter(!is.na(ozone_old), !is.na(ozone_new)) |>
+  mutate(
+    diff     = ozone_new - ozone_old,
+    pct_diff = (diff / ozone_old) * 100
+  )
+
+cat("Facilities in comparison:", nrow(merged), "\n")
+```
+
+---
+
+## 4. Summary Statistics
+
+```{r summary-stats}
+bind_rows(
+  merged |> summarise(across(c(ozone_old, ozone_new),
+    list(n = ~sum(!is.na(.)), mean = ~mean(., na.rm=TRUE),
+         sd = ~sd(., na.rm=TRUE), median = ~median(., na.rm=TRUE),
+         min = ~min(., na.rm=TRUE), max = ~max(., na.rm=TRUE)))) |>
+    pivot_longer(everything(), names_to = c("source", "stat"), names_sep = "_(?=[^_]+$)") |>
+    pivot_wider(names_from = stat, values_from = value) |>
+    mutate(source = recode(source, ozone_old = "SEDAC (old)", ozone_new = "FAQSD (new)"))
+) |>
+  mutate(across(where(is.numeric), ~round(., 2))) |>
+  knitr::kable(caption = "Summary statistics by source (ppb)")
+```
+
+```{r diff-stats}
+merged |>
+  summarise(
+    n            = n(),
+    mean_diff    = mean(diff),
+    sd_diff      = sd(diff),
+    median_diff  = median(diff),
+    min_diff     = min(diff),
+    max_diff     = max(diff),
+    mean_pct     = mean(pct_diff),
+    n_gt10ppb    = sum(abs(diff) > 10),
+    n_gt20pct    = sum(abs(pct_diff) > 20)
+  ) |>
+  mutate(across(where(is.numeric), ~round(., 2))) |>
+  pivot_longer(everything(), names_to = "Statistic", values_to = "Value") |>
+  knitr::kable(caption = "Difference statistics (FAQSD - SEDAC)")
+```
+
+**Interpretation:** The FAQSD values are on average ~1.5 ppb lower than SEDAC. This is consistent with the FAQSD product using a 3-year average of design values (4th-highest MDA8) over more recent years (2019–2022) vs. the older SEDAC climatology. The bulk of facilities show close agreement; a smaller tail shows larger divergence.
+
+---
+
+## 5. Distribution Comparison
+
+```{r dist-plot}
+merged |>
+  select(FACILITYID, SEDAC = ozone_old, FAQSD = ozone_new) |>
+  pivot_longer(-FACILITYID, names_to = "Source", values_to = "ozone_ppb") |>
+  ggplot(aes(x = ozone_ppb, fill = Source)) +
+  geom_histogram(binwidth = 2, alpha = 0.6, position = "identity", color = "white") +
+  scale_fill_manual(values = c("SEDAC" = "#2171b5", "FAQSD" = "#cb181d")) +
+  labs(
+    title    = "Distribution of Mean Ozone Exposure by Source",
+    subtitle = "Matched facilities only (n = 1,676)",
+    x        = "Mean Ozone (ppb)",
+    y        = "Count",
+    fill     = "Source"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "top")
+```
+
+```{r density-plot}
+merged |>
+  select(FACILITYID, SEDAC = ozone_old, FAQSD = ozone_new) |>
+  pivot_longer(-FACILITYID, names_to = "Source", values_to = "ozone_ppb") |>
+  ggplot(aes(x = ozone_ppb, color = Source, fill = Source)) +
+  geom_density(alpha = 0.2, linewidth = 1) +
+  geom_vline(
+    data = merged |>
+      summarise(SEDAC = mean(ozone_old), FAQSD = mean(ozone_new)) |>
+      pivot_longer(everything(), names_to = "Source", values_to = "mean"),
+    aes(xintercept = mean, color = Source), linetype = "dashed", linewidth = 0.8
+  ) +
+  scale_color_manual(values = c("SEDAC" = "#2171b5", "FAQSD" = "#cb181d")) +
+  scale_fill_manual(values  = c("SEDAC" = "#2171b5", "FAQSD" = "#cb181d")) +
+  labs(
+    title    = "Density of Mean Ozone Exposure by Source",
+    subtitle = "Dashed lines show dataset means",
+    x        = "Mean Ozone (ppb)",
+    y        = "Density"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "top")
+```
+
+---
+
+## 6. Scatter Plot: Old vs. New
+
+```{r scatter}
+# Correlation
+r2 <- cor(merged$ozone_old, merged$ozone_new, use = "complete.obs")^2
+
+ggplot(merged, aes(x = ozone_old, y = ozone_new)) +
+  geom_point(alpha = 0.3, size = 1.2, color = "#555555") +
+  geom_abline(slope = 1, intercept = 0, color = "#e41a1c", linewidth = 1, linetype = "dashed") +
+  geom_smooth(method = "lm", se = TRUE, color = "#377eb8", linewidth = 1) +
+  annotate("text", x = 40, y = 95,
+           label = sprintf("R² = %.3f", r2), size = 4.5, hjust = 0) +
+  labs(
+    title    = "SEDAC vs. FAQSD Ozone Values",
+    subtitle = "Red dashed line = 1:1; blue line = linear fit",
+    x        = "SEDAC Mean Ozone (ppb)",
+    y        = "FAQSD Mean Ozone (ppb)"
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+---
+
+## 7. Distribution of Differences
+
+```{r diff-hist}
+ggplot(merged, aes(x = diff)) +
+  geom_histogram(binwidth = 1, fill = "#6baed6", color = "white") +
+  geom_vline(xintercept = 0, color = "black", linewidth = 0.8) +
+  geom_vline(xintercept = mean(merged$diff), color = "#e41a1c",
+             linewidth = 0.8, linetype = "dashed") +
+  annotate("text", x = mean(merged$diff) + 0.3, y = Inf, vjust = 2,
+           label = sprintf("Mean: %.2f ppb", mean(merged$diff)),
+           color = "#e41a1c", size = 4, hjust = 0) +
+  labs(
+    title    = "Distribution of Ozone Differences (FAQSD − SEDAC)",
+    subtitle = "Negative = FAQSD lower than SEDAC",
+    x        = "Difference (ppb)",
+    y        = "Count"
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+```{r pct-diff-hist}
+ggplot(merged, aes(x = pct_diff)) +
+  geom_histogram(binwidth = 2, fill = "#74c476", color = "white") +
+  geom_vline(xintercept = 0, color = "black", linewidth = 0.8) +
+  geom_vline(xintercept = mean(merged$pct_diff), color = "#e41a1c",
+             linewidth = 0.8, linetype = "dashed") +
+  labs(
+    title    = "Distribution of Percent Differences (FAQSD − SEDAC) / SEDAC",
+    subtitle = "Most facilities within ±10%",
+    x        = "Percent Difference (%)",
+    y        = "Count"
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+---
+
+## 8. Outlier Facilities
+
+Facilities with an absolute difference > 10 ppb are flagged as outliers for review.
+
+```{r outliers}
+outliers <- merged |>
+  filter(abs(diff) > 10) |>
+  arrange(diff) |>
+  select(FACILITYID, ozone_old, ozone_new, diff, pct_diff, dist_to_tract_m) |>
+  mutate(across(where(is.numeric), ~round(., 2)))
+
+cat(nrow(outliers), "facilities with |diff| > 10 ppb\n")
+
+outliers |>
+  knitr::kable(
+    col.names = c("FACILITYID", "SEDAC (ppb)", "FAQSD (ppb)",
+                  "Diff (ppb)", "% Diff", "Dist to tract (m)"),
+    caption   = "Facilities with absolute difference > 10 ppb"
+  )
+```
+
+```{r outlier-plot}
+merged |>
+  mutate(outlier = abs(diff) > 10) |>
+  ggplot(aes(x = ozone_old, y = diff, color = outlier)) +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "gray50") +
+  geom_hline(yintercept = c(-10, 10), linetype = "dotted", color = "#e41a1c", alpha = 0.6) +
+  geom_point(alpha = 0.4, size = 1.5) +
+  scale_color_manual(
+    values = c("FALSE" = "#aaaaaa", "TRUE" = "#e41a1c"),
+    labels = c("Within ±10 ppb", "|diff| > 10 ppb"),
+    name   = NULL
+  ) +
+  labs(
+    title    = "SEDAC Value vs. Difference (FAQSD − SEDAC)",
+    subtitle = "Red dotted lines at ±10 ppb threshold",
+    x        = "SEDAC Mean Ozone (ppb)",
+    y        = "Difference: FAQSD − SEDAC (ppb)"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(legend.position = "top")
+```
+
+Map outliers
+```{r}
+outliers <- merged %>% 
+  filter(abs(diff) > 10)
+
+prison_outliers <- prisons %>% 
+  filter(FACILITYID %in% outliers$FACILITYID) %>% 
+  mutate(FACILITYID = as.numeric(FACILITYID)) %>% 
+  left_join(outliers, by = "FACILITYID")
+
+
+mapview(st_centroid(prison_outliers), z = "diff") 
+
+# Most in California, but spread all over the place. All in/surrounding big cities.
+# Most on the west coast decrease, east coast increased.
+```
+
+
+---
+
+## 9. Distance to Nearest Tract vs. Difference
+
+Facilities matched to more distant tract centroids may show larger discrepancies, particularly for rural or remote locations (AK/HI).
+
+```{r dist-diff}
+merged |>
+  mutate(dist_km = dist_to_tract_m / 1000) |>
+  filter(dist_km < 500) |>   # trim extreme AK/HI outliers for readability
+  ggplot(aes(x = dist_km, y = abs(diff))) +
+  geom_point(alpha = 0.3, size = 1.2, color = "#555555") +
+  geom_smooth(method = "loess", se = TRUE, color = "#e41a1c", linewidth = 1) +
+  labs(
+    title    = "Distance to Matched Tract Centroid vs. |Absolute Difference|",
+    subtitle = "Facilities within 500 km shown; loess smooth",
+    x        = "Distance to Nearest Tract Centroid (km)",
+    y        = "|FAQSD − SEDAC| (ppb)"
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+---
+
+## 10. Summary
+
+```{r final-summary}
+tibble::tribble(
+  ~Metric,                                    ~Value,
+  "Matched facilities",                       as.character(nrow(merged)),
+  "Mean difference (FAQSD − SEDAC)",          sprintf("%.2f ppb", mean(merged$diff)),
+  "Median difference",                        sprintf("%.2f ppb", median(merged$diff)),
+  "SD of differences",                        sprintf("%.2f ppb", sd(merged$diff)),
+  "Facilities within ±5 ppb",                 sprintf("%d (%.1f%%)", sum(abs(merged$diff) <= 5), mean(abs(merged$diff) <= 5)*100),
+  "Facilities within ±10 ppb",                sprintf("%d (%.1f%%)", sum(abs(merged$diff) <= 10), mean(abs(merged$diff) <= 10)*100),
+  "Outliers |diff| > 10 ppb",                 sprintf("%d (%.1f%%)", sum(abs(merged$diff) > 10), mean(abs(merged$diff) > 10)*100),
+  "Outliers |pct diff| > 20%",                sprintf("%d (%.1f%%)", sum(abs(merged$pct_diff) > 20), mean(abs(merged$pct_diff) > 20)*100),
+  "Pearson R²",                               sprintf("%.4f", cor(merged$ozone_old, merged$ozone_new)^2)
+) |>
+  knitr::kable(caption = "Overall comparison summary")
+```
+
+**Key takeaways:**
+
+- The two sources are highly correlated (R² > 0.9), confirming they are measuring the same underlying exposure signal.
+- FAQSD values are on average ~1.5 ppb lower than SEDAC, likely reflecting the use of more recent years (2019–2022) and different spatial interpolation methodology.
+- The vast majority of facilities fall within ±10 ppb (~98%). Outliers are a small subset (~2%) warranting manual review, particularly facilities matched to distant tract centroids in remote regions (AK/HI).
+- The FAQSD product is preferred for this study given its better performance for rural facilities and methodological alignment with EPA NAAQS design value standards.

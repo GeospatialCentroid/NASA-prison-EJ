@@ -1,73 +1,197 @@
-#' Calculate ozone risk
+#' Calculate ozone exposure using EPA FAQSD Downscaler data
 #'
-#' This function calculates the ozone levels averaged within each prison boundary + buffer using the
-#' SEDAC 1km CONUS Ozone dataset for 2000-2016
+#' Computes the 3-year average of annual 4th-highest daily 8-hour maximum ozone
+#' (MDA8) for each prison polygon using the EPA Fused Air Quality Surface Using
+#' Downscaling (FAQSD) product.
 #'
-#' @param sf_obj An sf object of all polygons to be assessed
-#' @param folder The filepath to the folder with all the Ozone rasters (one for each month/year)
-#' @param dist The buffer distance (in meters) to add around polygon boundaries
-#' @param years The year range (given as a vector) to average Ozone over. Default is most recent available (2014-2016)
-#' @param save Whether to save (TRUE) the resulting dataframe (as .csv) or not (FALSE)
-#' @param out_path If `save = TRUE`, the file path to save the dataframe.
+#' FAQSD fuses AQS monitor observations with 12 km CMAQ model output via a
+#' Bayesian space-time downscaler. Output is one value per 2010 Census tract
+#' centroid per day. Spatial matching finds the nearest tract centroid to the
+#' closest point on each prison polygon boundary (not the polygon centroid),
+#' then pulls that tract's mean MDA8 value.
 #'
-#' @return A tibble with total mean ozone values for selected years within each buffered spatial boundary
-calc_ozone <-
-  function(sf_obj,
-           folder,
-           dist = 1000,
-           years = c(2014, 2016),
-           save = TRUE,
-           out_path = "outputs/") {
-    # import and calculate avg annual ozone for specified year range
+#' Expected file path structure:
+#'   data/phase2/raw/ozone/{year}_ozone_daily_8hour_maximum.txt.gz
+#'
+#' Data source:
+#'   EPA HESC RSIG FAQSD — https://www.epa.gov/hesc/rsig-related-downloadable-data-files
+#'   Columns: Date, FIPS, Longitude, Latitude,
+#'            ozone_daily_8hour_maximum(ppb), ozone_daily_8hour_maximum_stderr(ppb)
+#'
+#' @param sf_obj   An sf object of prison polygons (any CRS; reprojected internally).
+#' @param years    Integer vector of years to average across.
+#'                 Default c(2019, 2021, 2022) skips 2020 (anomalous COVID emissions).
+#' @param data_dir Path to folder containing the FAQSD .txt.gz files.
+#'                 Default "data/phase2/raw/ozone".
+#' @param save     Logical. Save results as CSV. Default TRUE.
+#' @param out_path Directory for the saved CSV. Default "outputs/".
+#'
+#' @return A tibble with one row per facility:
+#'   FACILITYID, mean_ozone (ppb), matched_fips, dist_to_tract_m
+#'
+#' @examples
+#' \dontrun{
+#' prisons <- sf::st_read("study_prisons.shp")
+#' result  <- calc_ozone_faqsd(prisons)
+#' result  <- calc_ozone_faqsd(prisons, years = c(2019, 2021, 2022),
+#'                             data_dir = "data/phase2/raw/ozone")
+#' }
 
-    files <- list.files(folder, pattern = ".tif", full.names = TRUE)
+calc_ozone <- function(
+    sf_obj,
+    years    = c(2019, 2021, 2022),
+    data_dir = "data/phase2/raw/ozone",
+    save     = TRUE,
+    out_path = "outputs/"
+) {
+  
+  # -- 1. Validate inputs -------------------------------------------------------
+  if (2020 %in% years)
+    warning(
+      "Year 2020 included. COVID-related emission reductions produced ",
+      "anomalously low ozone precursor levels. Consider excluding it."
+    )
+  
+  # -- 2. Load and parse FAQSD data for each year -------------------------------
+  load_year <- function(year) {
     
-    # loop over  years
-    out <- vector("list", length = length(years))
+    filepath <- file.path(
+      data_dir,
+      sprintf("%d_ozone_daily_8hour_maximum.txt.gz", year)
+    )
+    if (!file.exists(filepath))
+      stop(sprintf("File not found for year %d:\n  %s", year, filepath))
     
-    for (i in 1:length(years)){
-      
-      daily <- files %>%
-        purrr::keep(grepl('2014', files)) %>%
-        map(rast) %>%
-        # stack all rasters (rast() works as stack() in terra)
-        rast()
-      
-      # calculate 4th highest value for each pixel
-      out[[i]] <- terra::app(daily, fun=function(X,na.rm) X[order(X,decreasing=T)[4]])
-      
-      
-    }
-
-    #get values averaged across all 3 years
-    mean_ozone <- terra::rast(out) %>% 
-      mean()
-
-
-    # buffer prisons by dist
-    sf_buff <- sf_obj %>%
-      st_buffer(dist = dist)
-
-    # check if CRS match, if not transform prisons
-    if (crs(sf_obj) != crs(mean_ozone)) {
-      sf_buff <- st_transform(sf_buff, crs = crs(mean_ozone))
-    }
-
-
-    # calculate average ozone within each buffer
-    sf_buff$mean_ozone <- terra::extract(mean_ozone, sf_buff, fun = "mean", na.rm = TRUE)[, 2]
-
-    # clean dataset to return just prison ID and calculated value
-    sf_ozone <- sf_buff %>%
-      st_drop_geometry() %>%
-      select(FACILITYID, mean_ozone)
-
-
-
-    if (save == TRUE) {
-      write_csv(sf_ozone, file = paste0(out_path, "/ozone_", Sys.Date(), ".csv"))
-    }
-
-
-    return(sf_ozone)
+    message(sprintf("  [%d] Reading %s", year, basename(filepath)))
+    
+    df <- vroom::vroom(
+      filepath,
+      delim          = ",",
+      col_types      = vroom::cols(
+        .default                                = vroom::col_character(),
+        Longitude                               = vroom::col_double(),
+        Latitude                                = vroom::col_double(),
+        `ozone_daily_8hour_maximum(ppb)`        = vroom::col_double(),
+        `ozone_daily_8hour_maximum_stderr(ppb)` = vroom::col_double()
+      ),
+      show_col_types = FALSE,
+      na             = c("", "NA", "-999", "-9999")
+    ) |>
+      janitor::clean_names()
+    
+    # Coerce after clean_names() as a safety net — handles any header variants
+    # where col_types spec didn't fire (e.g. extra whitespace in original names)
+    df <- df |>
+      dplyr::mutate(
+        latitude                             = as.numeric(latitude),
+        longitude                            = as.numeric(longitude),
+        ozone_daily_8hour_maximum_ppb        = as.numeric(ozone_daily_8hour_maximum_ppb),
+        ozone_daily_8hour_maximum_stderr_ppb = as.numeric(ozone_daily_8hour_maximum_stderr_ppb)
+      )
+    
+    required_cols <- c("date", "latitude", "longitude", "fips",
+                       "ozone_daily_8hour_maximum_ppb",
+                       "ozone_daily_8hour_maximum_stderr_ppb")
+    missing_cols <- setdiff(required_cols, names(df))
+    if (length(missing_cols) > 0)
+      stop(sprintf(
+        "Year %d: required column(s) not found: %s\nActual columns: %s",
+        year,
+        paste(missing_cols, collapse = ", "),
+        paste(names(df), collapse = ", ")
+      ))
+    
+    # Keep only columns needed downstream
+    df |> dplyr::select(fips, latitude, longitude, ozone_daily_8hour_maximum_ppb)
   }
+  
+  message("\nLoading FAQSD ozone data...")
+  all_years_data <- purrr::map(years, load_year)
+  
+  # -- 3. Compute 4th-highest MDA8 per tract per year --------------------------
+  # Mirrors EPA NAAQS design value methodology.
+  # Uses data.table for speed on 30M+ row datasets.
+  message("\nComputing 4th-highest MDA8 per census tract per year...")
+  
+  fourth_highest <- function(x) {
+    x <- sort(x[!is.na(x)], decreasing = TRUE)
+    if (length(x) >= 4) x[4] else NA_real_
+  }
+  
+  year_dvs <- purrr::map(all_years_data, function(df) {
+    dt <- data.table::as.data.table(df)
+    dt[, .(
+      dv_o3_ppb = fourth_highest(ozone_daily_8hour_maximum_ppb),
+      latitude  = latitude[1],
+      longitude = longitude[1]
+    ), by = fips]
+  })
+  
+  # -- 4. Average design values across years ------------------------------------
+  mean_ozone_tract <- data.table::rbindlist(year_dvs) |>
+    dplyr::group_by(fips, latitude, longitude) |>
+    dplyr::summarise(
+      mean_ozone = mean(dv_o3_ppb, na.rm = TRUE),
+      n_years    = sum(!is.na(dv_o3_ppb)),
+      .groups    = "drop"
+    ) |>
+    dplyr::filter(!is.na(mean_ozone))
+  
+  message(sprintf("  %s tract centroids with valid estimates.",
+                  format(nrow(mean_ozone_tract), big.mark = ",")))
+  
+  # -- 5. Convert tract centroids to sf (projected) ----------------------------
+  tracts_sf <- mean_ozone_tract |>
+    sf::st_as_sf(coords = c("longitude", "latitude"), crs = 4326) |>
+    sf::st_transform(5070)
+  
+  # -- 6. Project prison polygons to Albers Equal Area -------------------------
+  message("Projecting prison polygons...")
+  prisons_proj <- sf::st_transform(sf_obj, 5070)
+  
+  # -- 7. Find nearest tract centroid to each prison boundary ------------------
+  message("Matching prison boundaries to nearest tract centroids...")
+  
+  nearest_idx <- sf::st_nearest_feature(prisons_proj, tracts_sf)
+  
+  # Distance from polygon boundary to matched tract centroid
+  dist_m <- sf::st_distance(
+    prisons_proj,
+    tracts_sf[nearest_idx, ],
+    by_element = TRUE
+  ) |> as.numeric()
+  
+  n_far <- sum(dist_m > 20000, na.rm = TRUE)
+  if (n_far > 0)
+    warning(sprintf(
+      "%d facilities matched to a tract centroid >20 km away. Review dist_to_tract_m.",
+      n_far
+    ))
+  
+  # -- 8. Assemble output -------------------------------------------------------
+  result <- sf::st_drop_geometry(sf_obj) |>
+    dplyr::transmute(
+      FACILITYID      = FACILITYID,
+      mean_ozone      = mean_ozone_tract$mean_ozone[nearest_idx],
+      matched_fips    = mean_ozone_tract$fips[nearest_idx],
+      dist_to_tract_m = round(dist_m)
+    )
+  
+  message(sprintf(
+    "\nDone. %s facilities | mean: %.1f ppb | range: %.1f-%.1f ppb",
+    format(nrow(result), big.mark = ","),
+    mean(result$mean_ozone, na.rm = TRUE),
+    min(result$mean_ozone,  na.rm = TRUE),
+    max(result$mean_ozone,  na.rm = TRUE)
+  ))
+  
+  # -- 9. Save ------------------------------------------------------------------
+  if (save) {
+    if (!dir.exists(out_path)) dir.create(out_path, recursive = TRUE)
+    out_file <- file.path(out_path, paste0("ozone_faqsd_", Sys.Date(), ".csv"))
+    readr::write_csv(result, file = out_file)
+    message(sprintf("Saved: %s", out_file))
+  }
+  
+  dplyr::as_tibble(result)
+}
