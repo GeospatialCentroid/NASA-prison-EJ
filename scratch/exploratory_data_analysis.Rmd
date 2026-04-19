@@ -1,0 +1,274 @@
+---
+title: "exploratory_data_analysis"
+output: html_document
+---
+
+```{r}
+#source packages
+source("setup.R")
+
+library(DataExplorer) #quickly export images
+```
+
+First, let us load in the applicable data
+
+```{r}
+#for now, use the final csv from phase 1 of the project
+data <- read.csv("outputs/final_df_2023-08-31.csv") %>% data.frame()
+
+#a precursory view of what we have. 
+#summary(data)
+
+```
+
+Next, it is desirable to have a sneak peak of the indicators, let's first just run the indicators through summary
+
+```{r}
+#select indicators
+indicator_data <- data %>% 
+  select(flood_risk, 
+         wildfire_risk,
+         lst_avg,
+         percent_tree_cover,
+         mean_ozone, #will need to remove for new analysis (for now)
+         avg_pm25,
+         pesticides,
+         trafficProx,
+         npl_prox,
+         rmp_prox,
+         haz_prox) 
+
+#quick 5-number summary of our data. 
+#not sure what is happening with some of our proximity measures, will need to look a bit closer.
+summary(indicator_data)
+
+
+```
+
+Ok, things here seem promising, let's take a look at the inf's.
+
+When computing any of our proximity scores, we are using a "Weighted Proximity Score", which ensures that features closest to the value of interest "count more" than features further away. This score is expressed as\
+$$
+\text{Proximity Score} = \sum_{i=1}^N \frac{1}{d_i}, i= 1, 2, \ldots, N
+$$ 
+where $d_i$ is the distance with in a specific boundary, or in our case nearest if there are no features with in the boundary. Note, if a score comes up as "Inf," this is `r`'s way of rounding a value $d_i$ that is very close to/is $0$. **What was done previously when working with "Inf?"** (Set value to 0.)
+
+To get a glimpse of what's going on, let's map the prisons where an inf is happening in Traffic Proximity and Risk Management Plan Proximity. 
+
+```{r}
+#snag the prisons that are causing issues.
+infs <- data %>% filter(is.infinite(trafficProx)|is.infinite(rmp_prox))
+#head(infs)
+
+#recover the boundaries to plot
+old_prisons <- read_sf("data/phase1/processed/prisons/study_prisons.shp") 
+flagged_prisons <- old_prisons %>% filter(FACILITYID%in%infs$FACILITYID)
+
+#let's handle traffic proximity first
+#load in traffic data
+load("data/phase1/processed/traffic_proximity/aadt_2018.RData")
+traffic_inf <- flagged_prisons %>% filter(FACILITYID == "10003116")
+#step through what calc traffic is doing. First add buffer
+buffer <- st_buffer(traffic_inf,500)
+
+#find roads near this point
+roads_nearby <- st_crop(aadt_2018,buffer) %>% 
+  mutate(distance=as.numeric(st_distance(.,traffic_inf))) %>%
+  mutate(Overlap = distance == 0)
+           
+ggplot()+
+  geom_sf(data=roads_nearby,aes(color=Overlap))+
+  geom_sf(data=buffer,fill=NA,color="blue",linetype="dashed")+
+  geom_sf(data=traffic_inf,color="red",size=3)+
+  theme_minimal()+
+  labs(
+    title="Flagged Prison with 'Inf' Traffic Proximity"
+  )
+
+
+```
+
+
+Let's repeat this for rmp_proximity, too
+```{r}
+rmp_inf <- flagged_prisons[2,]
+rmp_prox <- read.csv("data/phase1/raw/EPA_RMP/EPA_Emergency_Response_(ER)_Risk_Management_Plan_(RMP)_Facilities.csv") %>% 
+  st_as_sf(coords = c("LONGITUDE8", "LATITUDE83"), crs = 4269) %>%
+  st_transform(crs = st_crs(rmp_inf))
+
+#find distances
+rmp_nearby <- rmp_inf %>%
+    mutate(find_points = st_is_within_distance(., rmp_prox, dist = 500)) %>%
+    unnest(find_points)
+
+#snag the county the prison is in
+library(tigris)
+mn_counties <- counties(state="MN")
+pine_county <- mn_counties %>% filter(NAME == "Pine")
+
+tm_shape(pine_county)+
+  tm_lines()+
+tm_shape(rmp_inf)+
+  tm_polygons()+
+  tm_shape(rmp_prox[rmp_nearby$find_points,])+
+  tm_dots(size=1)
+
+ggplot() +
+  geom_sf(data = rmp_inf, fill = NA, color = "black") +
+  geom_sf(
+    data = rmp_prox[rmp_nearby$find_points, ],
+    color = "blue",
+    size = 2
+  ) +
+  theme_minimal()+
+  labs(
+    title="Flagged Prison with 'Inf' rmp_proximity"
+  )
+
+```
+
+```{r,eval = FALSE}
+
+#let's export some uni-dimensional stats for what we have
+DataExplorer::create_report(indicator_data,
+                            config=list(
+                              introduce=list(),
+                              plot_missing=list(),
+                              plot_histogram=list(),
+                              plot_boxplot=list(),
+                              plot_correlation=list(),
+                              plot_qq=list(),
+                              plot_scatterplot=list()
+                            ))
+```
+
+
+
+
+```{r}
+#ok. we need to speed this up and consider data not yet in the final data set form. 
+
+#these data sets are FACILITY ID and INDICATOR Data, so column two is of interest, primarily. 
+library(patchwork)
+analyze_data <- function(file){
+  #load in data
+  data <- read.csv(paste0("outputs/",file)) %>% data.frame()
+  
+  #display histogram, and box plot, and summarize
+  fivenumsum <- summary(data[,2])
+  
+  hist <- data %>% ggplot(aes(x=data[,2]))+
+    geom_histogram()+
+    theme_minimal()
+  
+  box <- data %>% ggplot(aes(x=data[,2]))+
+    geom_boxplot()+
+    coord_flip()+
+    theme_minimal()
+  
+  plot <- hist +box
+  
+  outputs <- list(fivenumsum,plot)
+  return(outputs)
+}
+
+new_files <- list("hazardous_waste_proximity_2026-02-12.csv",
+                  "npl_proximity_2026-03-11.csv",
+                  "pm25_2026-03-26.csv",
+                  "rmp_proximity_2026-02-11.csv",
+                  "wildfire_risk_2026-02-12.csv")
+
+summaries <- list()
+plots <- list()
+for (i in 1:length(new_files)){
+  print(paste0(new_files[i]))
+  temp <- analyze_data(new_files[i])
+  
+  summaries[i] <- temp[1]
+  plots[i] <- temp[2]
+  i+1
+}
+
+```
+```{r}
+new_prisons <- read_sf("data/phase2/processed/prisons/study_prisons.gpkg")
+
+haz_prox <- read.csv("outputs/hazardous_waste_proximity_2026-02-12.csv") %>% 
+  data.frame()
+
+haz_data <- read.csv("data/phase2/processed/hazardous_waste/TSD_LQGs.csv") %>% 
+  filter(!is.na(LONGITUDE83) | !is.na(LATITUDE83)) %>%
+    st_as_sf(coords = c("LONGITUDE83", "LATITUDE83"), crs = 4269) %>%
+    st_transform(crs = st_crs(new_prisons))
+
+summary(haz_prox)
+
+infs <- haz_prox %>% filter(haz_prox=="Inf")
+
+prison_infs <- new_prisons %>% filter(FACILITYID%in%infs$FACILITYID)
+
+dist <- 5000
+
+prison_dist <- prison_infs %>%
+  mutate(find_points = st_is_within_distance(., haz_data, dist = dist))
+
+first <- prison_dist[1,]
+mapview(prison_infs[1,])+
+  mapview(haz_data[prison_dist[1,28],])
+
+mapview(prison_infs[2,])+
+  mapview(haz_data[prison_dist[2,28],])
+
+mapview(prison_infs[3,])+
+  mapview(haz_data[prison_dist[3,28],])
+
+mapview(prison_infs[4,])+
+  mapview(haz_data[prison_dist[4,28],])
+```
+```{r}
+npl_data <- read_sf("data/phase2/processed/NPL/NPL_arc_geocode.shp")
+
+npl_prox <- read.csv("outputs/npl_proximity_2026-03-11.csv")
+
+summary(npl_prox) #at first glance, the doesn't seem to be anything sus here. Carry on brother
+```
+```{r}
+pm25_prox <- read.csv("outputs/pm25_2026-03-26.csv")
+
+summary(pm25_prox) #also seems fine. but like who knows
+```
+```{r}
+rmp_prox <- read.csv("outputs/rmp_proximity_2026-02-11.csv")
+rmp_data <- read.csv("data/phase2/raw/RMP/EPA RMP Spreadsheets — The Data Liberation Project - Facilities.csv")%>%
+    st_as_sf(coords = c("Lng", "Lat"), crs = 4269) %>%
+    st_transform(crs = st_crs(new_prisons))
+
+summary(rmp_prox) #ah, caught some some infs here. 
+
+rmp_infs <- rmp_prox %>% filter(rmp_prox=="Inf")
+
+rmp_prison_inf <- new_prisons %>% filter(FACILITYID%in%rmp_infs$FACILITYID) #oh, this may be different than what we pulled in the old data set... weird!
+
+#find points: 2353,9495
+#st_is_within_distance(rmp_prison_inf, rmp_data,5000)
+
+mapview(rmp_prison_inf)+
+  mapview(rmp_data[c(2353,9495),]) #looks like second point over laps
+```
+
+```{r}
+wildfire_risk <- read.csv("outputs/wildfire_risk_2026-02-12.csv")
+
+summary(wildfire_risk) #how is this interpreted/what does a max of 39,254.352 mean???
+
+#how many of these are just absolutely packing?
+big_risk <- wildfire_risk %>% filter(wildfire_risk>1000)
+lil_risk <- wildfire_risk %>% filter(wildfire_risk<1000)
+
+hist(lil_risk$wildfire_risk)
+boxplot(lil_risk$wildfire_risk)
+summary(whp_values)
+quantile(wildfire_risk, probs = c(0, .25, .5, .75, .9, .99, 1), na.rm = TRUE)
+hist(wildfire_risk$wildfire_risk, breaks = 50)
+```
+
