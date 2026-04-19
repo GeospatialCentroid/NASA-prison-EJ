@@ -1,0 +1,48 @@
+---
+title: "comparison_data_proposal"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, echo=FALSE}
+#library packages
+source("setup.R")
+library(mapview)
+```
+
+## Zillow Neighborhoods Data
+
+Last updated in 2017, the Zillow Neighborhoods Data gives polygons of \~17,000 neighborhoods over 650 cities in the United States. Including cities in Alaska, Hawaii, Puerto Rico, and Washington DC. The data was made available by the EPA under a Creative Commons License and was downloaded at the following [link.](https://catalog.data.gov/dataset/neighborhoods-us-2017-zillow-segs?from_hint=eyJxIjoiemlsbG93IG5laWdoYm9yaG9vZCBib3VuZGFyaWVzICIsInNvcnQiOiJyZWxldmFuY2UifQ%3D%3D)
+
+New versions of this data don't seem to be available and are marked as "proprietary" by Zillow. Instead, all research data from Zillow are formated as .csv's that give housing specific data. While interesting, this doesn't help us.
+
+This data is also viewable on [arcgis.com](https://www.arcgis.com/home/item.html?id=56b89613f9f7450fb44e857691a244e7), but I will also map it below. (Click Map Viewer to see data.)
+
+This data has the following layers
+
+```{r}
+zillow_path <- "data/scratch/Zillow_Neighborhoods/ZillowNeighborhoods.gdb"
+st_layers(zillow_path)
+```
+
+The GeoDD and Areas layers seem to be of interest, and could be useful for further analysis. Let's view these as data, (but zoom in???)
+
+```{r}
+#let's look at the neighborhood areas, and geoDD to understand the difference
+zillow_geodd <- st_read(zillow_path,layer="ZillowNeighborhoods_GeoDD")
+zillow_areas <- st_read(zillow_path,layer="ZillowNeighborhoodsAreas")
+
+head(zillow_geodd)
+head(zillow_areas)
+```
+
+In this data we see that we aren't able to do any filtering of the neighborhoods. Furthermore, where neighborhoods land within a city also seem interesting.../random/weird. We also don't seem to get an idea if these areas are rural, urban, peri-urban, etc, making it hard as a comparison set if we want to compare against those groups.
+
+My major concern with these data is that while we get an interesting/granular unit (neighborhoods) of where people live in the US; we don't get any population demographics within these polygons. We can sort by the available city and state, but these data would require more follow up work to be able to determine rural/urban/peri-urban.
+
+Our indicators should be able to be computed with these data! (So win?)
+
+## US Census Blocks Via tidycensus
