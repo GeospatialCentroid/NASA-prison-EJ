@@ -28,7 +28,7 @@ ee.Initialize(project = "ee-ccmothes")
 # ---- Configuration --------------------------------------------------------
 
 # Date range: summer months June-August, 2022-2025
-startDate = "2022-06-01"
+startDate = "2019-06-01"
 endDate = "2025-08-31"
 
 # Summer month filter
@@ -143,11 +143,11 @@ daily_mean_lst = lst_day_processed.map(reduceRegions).flatten()
 task = ee.batch.Export.table.toDrive(
     collection=daily_mean_lst,
     folder="gee_exports",
-    description='prison_lst_landsat_daily_summer_2022_2025',
+    description='prison_lst_landsat_daily_summer_2019_2025',
     fileFormat='CSV'
 )
 
 task.start()
 
-print("Export task submitted: prison_lst_landsat_daily_summer_2022_2025")
+print("Export task submitted: prison_lst_landsat_daily_summer_2019_2025")
 print(f"Check status at: https://code.earthengine.google.com/tasks")
