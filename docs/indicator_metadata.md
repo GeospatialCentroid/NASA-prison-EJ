@@ -93,7 +93,7 @@ boundaries + 1km buffer</td>
 St. Louis - van Donkelaar et al. 2024. North American Regional
 Estimates</a></td>
 <td>calc_pm25.R</td>
-<td></td>
+<td>process_data/process_pm25.R</td>
 <td>Average annual PM2.5 levels within prison boundaries + 1km
 buffer</td>
 <td>2021-2023</td>
@@ -115,14 +115,13 @@ within 500 meters, divided by distance in meters</td>
 </tr>
 <tr>
 <td>Pesticide use</td>
-<td><a
-href="https://www.earthdata.nasa.gov/data/catalog/sedac-ciesin-sedac-fermanv1-pestg-v1.01-1.01">Global
-PEST-CHEMGRIDS V1.01</a> Maggie et al. 2020.</td>
+<td><a href="https://doi.org/10.6084/m9.figshare.25854769.v2">Global
+PEST-CHEMGRIDS V2.01 Beta</a> Maggie and Tang 2024.</td>
 <td>calc_pesticides.R</td>
 <td></td>
-<td>The total pesticide application from 2025 in kg/ha*yr averaged over
+<td>The total pesticide application from 2018 in kg/ha*yr averaged over
 prison boundaries + 1km buffer.</td>
-<td>2025</td>
+<td>2018</td>
 <td>~ 10 km (5 arc-minute)</td>
 <td>Yes</td>
 </tr>
@@ -153,7 +152,7 @@ divided by the distance in km.</p>
 <p>Modeled after EJ Screen methods (pg. 21): <a
 href="https://www.epa.gov/sites/default/files/2021-04/documents/ejscreen_technical_document.pdf"
 class="uri">https://www.epa.gov/sites/default/files/2021-04/documents/ejscreen_technical_document.pdf</a></p></td>
-<td>january 2026</td>
+<td>January 2026</td>
 <td></td>
 <td>Yes</td>
 </tr>
