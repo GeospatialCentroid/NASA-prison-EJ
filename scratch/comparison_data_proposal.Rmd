@@ -1,48 +1,205 @@
 ---
-title: "comparison_data_proposal"
+title: "Comparison Data Proposal"
 output: html_document
 ---
 
 ```{r setup, include=FALSE}
-knitr::opts_chunk$set(echo = TRUE)
+knitr::opts_chunk$set(echo = TRUE,results = 'hold')
 ```
 
-```{r, echo=FALSE}
+```{r, echo=FALSE,message=FALSE}
 #library packages
 source("setup.R")
 library(mapview)
+library(tigris)
 ```
+
+This document is written as an interactive way to consider many different data sets. The data presented here is a first pass at looking for comparison data. Data presented in this document are the following:
+
+1.  Zillow Neighborhoods Data
+
+2.  Census Data (pulled via tidycensus)
+
+3.  Vera Institute of Justice County Incarceration Rates
+
+Limitations to each data set are discussed in their own section. For mapping purposes, I have chosen to only consider Colorado, but each data set can be scaled to the entire US.
+
+Data presented here are saved in `data/scratch/` in our shared data folder.
 
 ## Zillow Neighborhoods Data
 
-Last updated in 2017, the Zillow Neighborhoods Data gives polygons of \~17,000 neighborhoods over 650 cities in the United States. Including cities in Alaska, Hawaii, Puerto Rico, and Washington DC. The data was made available by the EPA under a Creative Commons License and was downloaded at the following [link.](https://catalog.data.gov/dataset/neighborhoods-us-2017-zillow-segs?from_hint=eyJxIjoiemlsbG93IG5laWdoYm9yaG9vZCBib3VuZGFyaWVzICIsInNvcnQiOiJyZWxldmFuY2UifQ%3D%3D)
+Last updated in 2017, the Zillow Neighborhoods Data gives polygons of \~17,000 neighborhoods over 650 cities in the United States. Including cities in Alaska, Hawaii, Puerto Rico, and Washington DC. The data was made available by the EPA under a Creative Commons License and was downloaded at the following [link.](https://catalog.data.gov/dataset/neighborhoods-us-2017-zillow-segs?from_hint=eyJxIjoiemlsbG93IG5laWdoYm9yaG9vZCBib3VuZGFyaWVzICIsInNvcnQiOiJyZWxldmFuY2UifQ%3D%3D) These data are currently saved in our shared data folder under "scratch."
 
-New versions of this data don't seem to be available and are marked as "proprietary" by Zillow. Instead, all research data from Zillow are formated as .csv's that give housing specific data. While interesting, this doesn't help us.
+New versions of this data don't seem to be available and are marked as "proprietary" by Zillow. Instead, all research data from Zillow are formatted as .csv's that give housing specific data--which, while interesting, doesn't help us. In other words, the data from Zillow's research page no longer provides the neighborhood polygons, even though you can request housing specific data via the "neighborhood unit."
 
 This data is also viewable on [arcgis.com](https://www.arcgis.com/home/item.html?id=56b89613f9f7450fb44e857691a244e7), but I will also map it below. (Click Map Viewer to see data.)
 
 This data has the following layers
 
-```{r}
+```{r,warning=FALSE,message=FALSE}
 zillow_path <- "data/scratch/Zillow_Neighborhoods/ZillowNeighborhoods.gdb"
 st_layers(zillow_path)
 ```
 
-The GeoDD and Areas layers seem to be of interest, and could be useful for further analysis. Let's view these as data, (but zoom in???)
+The GeoDD and Areas layers seem to be of interest, and could be useful for further analysis. Let's view these data. Both data sets have the same columns.
 
 ```{r}
 #let's look at the neighborhood areas, and geoDD to understand the difference
-zillow_geodd <- st_read(zillow_path,layer="ZillowNeighborhoods_GeoDD")
+#zillow_geodd <- st_read(zillow_path,layer="ZillowNeighborhoods_GeoDD")
 zillow_areas <- st_read(zillow_path,layer="ZillowNeighborhoodsAreas")
 
-head(zillow_geodd)
+#head(zillow_geodd)
 head(zillow_areas)
 ```
 
-In this data we see that we aren't able to do any filtering of the neighborhoods. Furthermore, where neighborhoods land within a city also seem interesting.../random/weird. We also don't seem to get an idea if these areas are rural, urban, peri-urban, etc, making it hard as a comparison set if we want to compare against those groups.
+In this data, we see that we aren't able to do any filtering of the neighborhoods by population demographics. As in there is no indication of if there the neighborhood is urban or rural. Furthermore, which neighborhoods are mapped within a city also seem interesting/random/weird. To illustrate my point, consider the neighborhoods available in Colorado.
 
-My major concern with these data is that while we get an interesting/granular unit (neighborhoods) of where people live in the US; we don't get any population demographics within these polygons. We can sort by the available city and state, but these data would require more follow up work to be able to determine rural/urban/peri-urban.
+```{r,cache=TRUE,warning=FALSE,results='hide',message=FALSE}
+co <- states() %>% filter(NAME == "Colorado")
+co <- co %>% st_transform(st_crs(zillow_areas))
 
-Our indicators should be able to be computed with these data! (So win?)
+co_neighborhoods <- st_intersection(co,zillow_areas)
+```
+
+
+```{r,cache=TRUE,warning=FALSE}
+mapview(co_neighborhoods)
+```
+
+### Limitations/Concerns
+
+My major concern with these data is that while we get an interesting/granular unit (neighborhoods) of where people live in the US, it seems that only major metropolitan areas are mapped. Additionally, no updates/support for these data are available moving forward. 
+
+We may be able to get a sense of urbanicty from these data by using the RUCA codes from the USDA, but how much work it would take to do that is uncertain. Furthermore, we may not have any rural neighborhoods listed, making comparison a bit hard. 
 
 ## US Census Blocks Via tidycensus
+
+The `tidycensus` package allows a user to make an api call to get Census data from Census.gov and we can get polygons of census tracts and census block groups with associated population demographics that we may be interested in. The `tidycensus` package does this via the `tigris` package (and if we only care about the polygons of these tracts, we could use the `tigris` package directly).
+
+Documentation for `tidycensus` can be found [here](https://walker-data.com/tidycensus/index.html).
+
+As an example, let us read in some data from Colorado.
+
+```{r,cache=TRUE,message=FALSE,results='hold'}
+library(tidycensus)
+options(tigris_use_cache=TRUE)
+
+#note an API with the census is required to download this
+#let us start with census tracts
+co_tracts <- get_decennial(
+  geography = "tract",
+  state = "CO",
+  variables = "P1_001N", #grab urban and rural counts via census
+  geometry = TRUE, #saves as polygons
+  sumfile = "dhc"
+)
+
+head(co_tracts) #note that for many variables, this returns as long data
+
+```
+
+Furthermore, when we map these data, we can see that we have successfully returned every census tract in Colorado.
+
+```{r,cache=TRUE}
+mapview(co_tracts)
+```
+
+A perk of using the census to gather data is that any data available from the decennial census or the American Community Survey could be quickly gathered into our data. Additionally, the values are identifiable via the Federal Information Processing Series (FIPS) number, making data wrangling much simpler.
+
+### Including RUCA Codes
+
+If we wanted to utilize the groups of Urban, Peri-Urban, and Rural, we could do this by either returning an appropriate variable from the "Demographic and Housing Characteristics" file in the Census, or we could add these to the data by using Rural-Urban Communiting Area codes created by the USDA. These codes are generated at the census tract level and are associated by the FIPS number assigned to each census tract, which is called "GEOID" in our data above.
+
+If we were to add the codes to the data we read in above, we would do something like this:
+
+```{r,cache=TRUE}
+#load in ruca codes
+ruca_codes <- read.csv("data/scratch/US_Census_RUCA_Codes/RUCA-codes-2020-tract.csv")
+#pull primary codes
+primary_ruca_codes <- ruca_codes %>% select(
+  TractFIPS23,
+  PrimaryRUCA,
+  PrimaryRUCADescription
+)
+co_tracts <- co_tracts %>% rename(TractFIPS23=GEOID) #fix GEOID to match RUCA values
+#add to the colorado census tracts
+co_tracts <- left_join(co_tracts, primary_ruca_codes,by="TractFIPS23") %>% st_as_sf()
+
+head(co_tracts)
+```
+
+Now when we map these data, we see that an Urban code is associated with these data.
+
+```{r,cache=TRUE}
+mapview(co_tracts)
+```
+
+### Are Census Tracts "Too Coarse"?
+
+Because we are comparing prisons to some other place where people live, while some census tracts are of comparable size to prisons, many may be too big. Perhaps, we could consider the census block group instead?
+
+Thankfully, this is easy to do, and we can still add the associated RUCA codes to these data as well.
+
+Again, let us consider Colorado.
+
+```{r,cache=TRUE, warning=FALSE,message=FALSE,results='hold'}
+#pull census block groups
+co_block_groups <- get_decennial(
+   geography = "block group",
+  state = "CO",
+  variables = "P1_001N", #grab urban and rural counts via census
+  geometry = TRUE, #saves as polygons
+  sumfile = "dhc"
+)
+
+#maintain FIPS code
+co_block_groups <- co_block_groups %>% 
+  mutate(TractFIPS23 = str_sub(GEOID,1,11))
+
+#add RUCA
+co_block_groups <- co_block_groups %>% 
+  left_join(primary_ruca_codes, by = "TractFIPS23")
+
+mapview(co_block_groups)
+```
+
+### Limitations of this data
+
+Unfortunately, the RUCA codes are only available at the tract level, so the group classification we give the block groups may not be precise.
+
+What I like about this data is that it is easy to read in and add population demographics to because it is readily available by the Census. So, if our question evolves and we have more questions needed via the Census we could quickly pull these values in. The major limitation is that we have to pull data by state, but that isn't an insurmountable task to consider.
+
+## Vera Institute of Justice Data
+
+An inferential question that we could consider is comparing locations with high incarceration rates to our prison facilities. The data linked here is a first search into data that may provide this comparison.
+
+Pulled from the Vera Institute of Justice's incarceration trends [GitHub](https://github.com/vera-institute/incarceration-trends/tree/main), this data base is available for non-profit academic use and provides an incarceration rate at county level--among many other useful measures (urbanicity, facility demographics, etc). Additionally, this data collected annually from 1970-2025 (depending on the facility type considered). We could consider using the most recent data/data that matches the timing of Phase 1. This data is publicly displayed at Vera's [website](https://trends.vera.org/) through their own interactive tool.
+
+Before displaying the data provided in the county incarceration trends csv, I am most hesitant about these data because they are only available at the county level, which is too large for our purposes. So, other options may need to be pursued if we want to try to compare to locations with high incarceration rates.
+
+Let us first see if we could link this data to Colorado counties for the year 2025, and map the values in mapview.
+
+```{r,cache=TRUE,message=FALSE}
+library(tigris)
+county_inc_rates <- read.csv("data/scratch/incarceration-trends-main/incarceration_trends_county.csv")
+
+#let's look at Colorado in '25
+co_county_rates25 <- county_inc_rates %>% 
+  filter(state_abbr=="CO" & year=="2025") %>% 
+  mutate(GEOID = paste0("0",county_fips)) %>%  #add a GEOID to join on.
+  select(where(~!all(is.na(.))))
+
+#pull geometries 
+co_counties <- counties(state="CO",cb=TRUE) %>% 
+  select(GEOID,geometry)
+
+#combine relevant info via join. #weirdly, when looking at colorado, columns 51-164 are all NA... Could be me causing issues
+
+co_county_rates25 <- co_county_rates25 %>% 
+  left_join(co_counties,by="GEOID") %>% 
+  st_as_sf()
+
+mapview(co_county_rates25)
+```
+
+Note, not all Colorado counties were provided in the Vera data base, hence the blank spaces. Additionally, there were \~120 columns of empty data for Colorado. This NA's in this data may also be a limitation to using these data.
