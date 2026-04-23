@@ -194,11 +194,11 @@ exposure_scores <- list(ozone, pm25, pesticides, traffic) %>%
 #### Environmental Effects Scores
 
 ```{r}
-npl <- read_csv("data/processed/npl_prox_2023-05-16.csv")
+npl <- read_csv("outputs/npl_proximity_2026-03-11.csv")
 
-rmp <- read_csv("data/processed/rmp_prox_2023-05-16.csv")
+rmp <- read_csv("outputs/rmp_proximity_2026-02-11.csv")
 
-haz <- read_csv("data/processed/haz_prox_2023-05-16.csv")
+haz <- read_csv("outputs/hazardous_waste_proximity_2026-02-12.csv")
 
 effects_scores <- list(npl, rmp, haz) %>%
   purrr::reduce(left_join, by = "FACILITYID") %>%
