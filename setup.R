@@ -19,7 +19,8 @@ packages <- c('tidyverse',
               'vroom',
               'tools',
               'ncdf4',
-              'janitor'
+              'janitor',
+              "mapview"
 )
 
 ## load in packages
