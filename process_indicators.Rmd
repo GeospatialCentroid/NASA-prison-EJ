@@ -75,9 +75,9 @@ pm25 <-
 
 ```{r}
 pesticides <- calc_pesticides(prisons,
-                              path = "data/phase2/raw/pesticide/EPest_county_estimates_2019.txt",
+                              folder = "data/phase2/raw/pesticide/PEST-CHEMGRIDS_v2/NC/",
                               save = TRUE,
-                              output_dir = "outputs/")
+                              out_path = "outputs/")
 ```
 
 #### Traffic Proximity
