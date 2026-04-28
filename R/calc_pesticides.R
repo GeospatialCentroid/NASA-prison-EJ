@@ -28,6 +28,7 @@ calc_pesticides <- function(sf_obj,
   
   # --- 1. Load US mask -------------------------------------------------------
   us_mask <- terra::ifel(terra::rast(file.path(folder, "Countries_2018.nc")) == 208, 1, NA)
+  terra::crs(us_mask) <- "EPSG:4326" # set CRS from metadata
   
   # --- 2. List all pesticide .nc files (exclude country mask) ----------------
   pest_files <- list.files(folder, pattern = "\\.nc$", full.names = TRUE)
@@ -53,6 +54,7 @@ calc_pesticides <- function(sf_obj,
     
     r <- terra::rast(pest_files[[i]])
     terra::crs(r) <- "EPSG:4326" # set CRS from metadata
+    
     
     rast_H <- terra::mask(r[[layer_H]], us_mask)
     rast_L <- terra::mask(r[[layer_L]], us_mask)

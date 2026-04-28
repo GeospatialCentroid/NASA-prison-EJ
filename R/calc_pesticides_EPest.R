@@ -16,7 +16,7 @@
 #' @return A data frame with one row per facility:
 #'   FACILITYID, county_fips, pesticide_mean_kg
 
-calc_pesticides <- function(sf_obj,
+calc_pesticides_EPest <- function(sf_obj,
                             path,
                             year = 2019,
                             compounds = NULL,
