@@ -3,7 +3,7 @@
 library(tidyverse)
 
 # read in file from data/raw folder
-lst_daily <- read_csv("data/raw/heat_exposure/prison_lst_daily_all_2023-08-30.csv")
+lst_daily <- read_csv("data/phase2/raw/lst/prison_lst_daily_MODIS_2026-04-27.csv")
 
 
 # calculate summer average for each year
@@ -25,5 +25,5 @@ lst_summary <- lst_daily %>%
   summarise(lst_avg = median(LST_mean, na.rm = TRUE))
 
 # keep just total average for final dataset
-write_csv(lst_summary, paste0("data/processed/heat_exposure/lst_average_", 
+write_csv(lst_summary, paste0("data/phase2/processed/lst/lst_MODIS_average_", 
                               Sys.Date(), ".csv"))
