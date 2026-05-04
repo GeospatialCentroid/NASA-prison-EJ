@@ -51,8 +51,8 @@ calc_flood_risk <-
       )
     }
     
-    # for each water supply....
-    results <-  map_dfr(seq_len(nrow(data)), function(i) {
+    # for each polygon....
+    final_results <-  map_dfr(seq_len(nrow(data)), function(i) {
       if (verbose) pb$tick()
       
       
@@ -90,7 +90,7 @@ calc_flood_risk <-
         error = function(e) {
           if (verbose) {
             message("\nWarning: Unable to read flood data for ",
-                    data[i, ]$wsd_source_id)
+                    data[i, ]$FACILITYID)
           }
           # Return NULL to indicate error
           return(NULL)
@@ -162,7 +162,6 @@ calc_flood_risk <-
       }
     }
     )
-    
     
     # Save results
     if (save) {

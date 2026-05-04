@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 """
 Created on Thu Feb 16 13:13:56 2023
+Updated: Mon April 27 2026
 
 @author: ccmothes
 """
@@ -8,12 +9,12 @@ Created on Thu Feb 16 13:13:56 2023
 # set up earth engine
 import ee
 # ee.Authenticate()
-ee.Initialize()
+ee.Initialize(project = "ee-ccmothes")
 
 
 # define date range
-startDate = "2013-01-01"
-endDate = "2023-08-31"
+startDate = "2023-06-01"
+endDate = "2025-08-31"
 
 # Define function to convert Kelvin to Celcius
 
@@ -43,7 +44,7 @@ def applyQaMask(image):
   qaMask = bitwiseExtract(qcDay, 0, 1).lte(1)
   dataQualityMask = bitwiseExtract(qcDay, 2, 3).eq(0)
   #cloudMask = bitwiseExtract(qcDay, 4, 5).eq(0)
-  lstErrorMask = bitwiseExtract(qcDay, 6, 7).eq(0)
+  lstErrorMask = bitwiseExtract(qcDay, 6, 7).lte(1)
   mask = qaMask.And(dataQualityMask).And(lstErrorMask)
   return lstDay.updateMask(mask)
 
@@ -55,7 +56,7 @@ modisdata = ee.ImageCollection('MODIS/061/MYD11A1') \
 
 
 # Apply processing functions
-lst_day_processed = modisdata.map(toCelciusDay).map(applyQaMask)
+lst_day_processed = modisdata.map(applyQaMask).map(toCelciusDay)
 
 # Now calculate average summer day temperature across date range
 # summer_day_lst = lst_day_processed.select('LST_Day').median()
@@ -71,7 +72,7 @@ lst_day_processed = modisdata.map(toCelciusDay).map(applyQaMask)
 # lst_hotdays_2012 = ee.ImageCollection(lst_hotdays.select('hotdays')).sum().float()
 
 # Import eeFeatureCollection from assets
-prisons = ee.FeatureCollection("projects/ee-ccmothes/assets/study_prisons")
+prisons = ee.FeatureCollection("projects/ee-ccmothes/assets/study_prisons_updated")
 
 # filter lst for bounds of prisons
 # lst_day_processed_local = (lst_day_processed.filterBounds(prisons.geometry()))
@@ -136,7 +137,7 @@ daily_mean_lst = lst_day_processed.map(reduceRegions).flatten()
 task = ee.batch.Export.table.toDrive(
   collection=daily_mean_lst,
   folder="gee_exports",
-  description='prison_lst_daily_all_2023-08-30',
+  description='prison_lst_daily_MODIS_2026-04-27',
   fileFormat='CSV'
   #selectors=['FACILITYID', 'LST_Day_mean', 'system:index']
 )

@@ -18,7 +18,10 @@ packages <- c('tidyverse',
               'terra',
               'vroom',
               'tools',
-              'ncdf4'
+              'ncdf4',
+              'janitor',
+              "mapview",
+              "exactextractr"
 )
 
 ## load in packages

@@ -25,7 +25,12 @@ prisons <- read_sf("data/phase2/processed/prisons/study_prisons.gpkg")
 
 ```{r}
 # flood risk (takes 1-2 days to run)
-flood_risk <- calc_flood_risk(sf_obj = prisons)
+flood_risk <- calc_flood_risk(
+  data = prisons,
+  dist = 1000,
+  save = TRUE,
+  output_dir = "outputs/"
+)
 
 ```
 
@@ -45,8 +50,10 @@ wildfire_risk <- calc_wildfire_risk(
 # ozone
 ozone <- calc_ozone(
   sf_obj = prisons, 
-  folder = "data/raw/air_quality/o3_daily/",
-  dist = 1000, years = c(2014, 2016)
+  years    = c(2019, 2021, 2022),
+  data_dir = "data/phase2/raw/ozone",
+  save     = TRUE,
+  out_path = "outputs/"
 )
 ```
 
@@ -67,10 +74,10 @@ pm25 <-
 #### Pesticides
 
 ```{r}
-pesticides <- calc_pesticides(prisons, 
-                             folder = "data/raw/pesticides/ferman-v1-pest-chemgrids-v1-01-geotiff",
-                             dist = 1000, 
-                             save = TRUE)
+pesticides <- calc_pesticides(prisons,
+                              folder = "data/phase2/raw/pesticide/PEST-CHEMGRIDS_v2/NC/",
+                              save = TRUE,
+                              out_path = "outputs/")
 ```
 
 #### Traffic Proximity
@@ -79,7 +86,7 @@ pesticides <- calc_pesticides(prisons,
 # traffic proximity (takes 1.5 days to run on Desktop comp)
 traffic_prox <- calc_traffic_proximity(
   sf_obj = prisons,
-  file = "data/processed/traffic_proximity/aadt_2018.RData"
+  file = "data/phase2/processed/traffic/aadt_2023.RData"
 )
 ```
 
@@ -126,16 +133,17 @@ Note that heat exposure and canopy cover were saved in the 'data/processed' fold
 ```{r}
 ## climate scores -------------
 
-flood_risk <- read_csv("outputs/flood_risk_2023-03-10.csv") %>%
+flood_risk <- read_csv("outputs/flood_risk_2026-04-03.csv") %>%
   select(FACILITYID, flood_risk = flood_risk_percent)
 
-wildfire_risk <- read_csv("outputs/wildfire_risk_2023-08-29.csv")
+wildfire_risk <- read_csv("outputs/wildfire_risk_2026-02-12.csv")
 
-heat_exp <- read_csv("data/processed/heat_exposure/lst_average_2023-08-30.csv")
+heat_exp <- read_csv("data/phase2/processed/lst/lst_MODIS_average_2026-04-29.csv")
 
-canopy_cover <- read_csv("data/processed/canopy_cover/prison_canopy_AK.csv") %>%
-  bind_rows(read_csv("data/processed/canopy_cover/prison_canopy_HI.csv")) %>%
-  bind_rows(read_csv("data/processed/canopy_cover/prison_canopy_CONUS.csv"))
+canopy_cover <- read_csv("data/phase2/processed/canopy_cover/prison_canopy_AK.csv") %>%
+  bind_rows(read_csv("data/phase2/processed/canopy_cover/prison_canopy_HI.csv")) %>%
+  bind_rows(read_csv("data/phase2/processed/canopy_cover/prison_canopy_CONUS.csv")) %>% 
+  rename(percent_tree_cover = NLCD_Percent_Tree_Canopy_Cover)
 
 
 climate_scores <- list(flood_risk, wildfire_risk, heat_exp, canopy_cover) %>%
@@ -158,13 +166,13 @@ climate_scores <- list(flood_risk, wildfire_risk, heat_exp, canopy_cover) %>%
 #### Environmental Exposures Scores
 
 ```{r}
-ozone <- read_csv("outputs/ozone_2023-08-15.csv")
+ozone <- read_csv("outputs/ozone_2026-04-17.csv")
 
-pm25 <- read_csv("outputs/pm25_2023-08-10.csv")
+pm25 <- read_csv("outputs/pm25_2026-03-26.csv")
 
-pesticides <- read_csv("outputs/pesticides_2023-08-14.csv")
+pesticides <- read_csv("outputs/pesticides_2026-04-27.csv")
 
-traffic <- read_csv("outputs/traffic_prox_2023-05-13.csv")
+traffic <- read_csv("outputs/traffic_proximity_2026-04-14.csv")
 
 exposure_scores <- list(ozone, pm25, pesticides, traffic) %>%
   # convert FACILITYID to character for all to make sure they join
@@ -186,11 +194,11 @@ exposure_scores <- list(ozone, pm25, pesticides, traffic) %>%
 #### Environmental Effects Scores
 
 ```{r}
-npl <- read_csv("data/processed/npl_prox_2023-05-16.csv")
+npl <- read_csv("outputs/npl_proximity_2026-03-11.csv")
 
-rmp <- read_csv("data/processed/rmp_prox_2023-05-16.csv")
+rmp <- read_csv("outputs/rmp_proximity_2026-04-29.csv")
 
-haz <- read_csv("data/processed/haz_prox_2023-05-16.csv")
+haz <- read_csv("outputs/hazardous_waste_proximity_2026-04-29.csv")
 
 effects_scores <- list(npl, rmp, haz) %>%
   purrr::reduce(left_join, by = "FACILITYID") %>%
@@ -225,9 +233,9 @@ final_df <- list(climate_scores, exposure_scores, effects_scores) %>%
   left_join(prisons, by = "FACILITYID")
 
 # save as shapefile and csv
-final_df %>% st_as_sf() %>% write_sf(paste0("outputs/final_df_", Sys.Date(), ".shp"))
+final_df %>% st_as_sf() %>% write_sf(paste0("outputs/final_df_", Sys.Date(), ".gpkg"))
 
 final_df %>% 
-  select(-geometry) %>% 
+  select(-geom) %>% 
   write_csv(paste0("outputs/final_df_", Sys.Date(), ".csv"))
 ```

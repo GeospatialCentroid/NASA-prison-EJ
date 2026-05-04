@@ -3,8 +3,8 @@ Indicator Metatdata
 
 <table style="width:99%;">
 <colgroup>
-<col style="width: 8%" />
-<col style="width: 32%" />
+<col style="width: 7%" />
+<col style="width: 31%" />
 <col style="width: 5%" />
 <col style="width: 6%" />
 <col style="width: 31%" />
@@ -25,13 +25,15 @@ Indicator Metatdata
 </tr>
 <tr>
 <td>Heat index</td>
-<td>Landsat 8/9 Collection 2 Level-2 Surface Temperature (ST_B10)</td>
-<td>python/calc_lst_landsat.py</td>
-<td></td>
+<td><a
+href="https://developers.google.com/earth-engine/datasets/catalog/MODIS_061_MYD11A1#description">MODIS
+daily land surface temperature</a></td>
+<td>python/calc_myd11_lst_day.py</td>
+<td>procces_data/process_lst.R</td>
 <td>Mean LST for summer months (June-August) from the last three years
-(2022-2025) averaged within prison boundaries.</td>
+(2023-2025) averaged within prison boundaries.</td>
 <td>2022 - 2025</td>
-<td>30 m</td>
+<td>1 km</td>
 <td>Yes</td>
 </tr>
 <tr>
@@ -77,15 +79,15 @@ flooding annually)</td>
 <tr>
 <td>Ozone</td>
 <td><a
-href="https://sedac.ciesin.columbia.edu/data/set/aqdh-o3-concentrations-contiguous-us-1-km-2000-2016">SEDAC
-Annual O3 Concentrations for CONUS</a></td>
+href="https://www.epa.gov/hesc/rsig-related-downloadable-data-files">EPA
+HESC RSIG FAQSD</a></td>
 <td>calc_ozone.R</td>
 <td></td>
-<td>Average annual ozone levels for 2015 and 2016 within prison
-boundaries + 1km buffer</td>
-<td>2015-2016</td>
-<td>1 km</td>
-<td></td>
+<td>Computes the 3-year average of annual 4th-highest daily 8-hour
+maximum ozone (MDA8) for each prison’s census tract.</td>
+<td>2019, 2021, 2022</td>
+<td>Census tract</td>
+<td>Yes</td>
 </tr>
 <tr>
 <td>PM 2.5</td>
@@ -93,7 +95,7 @@ boundaries + 1km buffer</td>
 St. Louis - van Donkelaar et al. 2024. North American Regional
 Estimates</a></td>
 <td>calc_pm25.R</td>
-<td></td>
+<td>process_data/process_pm25.R</td>
 <td>Average annual PM2.5 levels within prison boundaries + 1km
 buffer</td>
 <td>2021-2023</td>
@@ -115,15 +117,14 @@ within 500 meters, divided by distance in meters</td>
 </tr>
 <tr>
 <td>Pesticide use</td>
-<td><a
-href="https://www.earthdata.nasa.gov/data/catalog/sedac-ciesin-sedac-fermanv1-pestg-v1.01-1.01">Global
-PEST-CHEMGRIDS V1.01</a> Maggie et al. 2020.</td>
+<td><a href="https://doi.org/10.6084/m9.figshare.25854769.v2">Global
+PEST-CHEMGRIDS V2.01 Beta</a> Maggie and Tang 2024.</td>
 <td>calc_pesticides.R</td>
 <td></td>
-<td>The total pesticide application from 2025 in kg/ha*yr averaged over
-prison boundaries + 1km buffer.</td>
-<td>2025</td>
-<td>~ 10 km (5 arc-minute)</td>
+<td>The total pesticide application from 2018 in kg/ha*yr averaged over
+prison boundaries.</td>
+<td>2018</td>
+<td>5 km</td>
 <td>Yes</td>
 </tr>
 <tr>
@@ -153,7 +154,7 @@ divided by the distance in km.</p>
 <p>Modeled after EJ Screen methods (pg. 21): <a
 href="https://www.epa.gov/sites/default/files/2021-04/documents/ejscreen_technical_document.pdf"
 class="uri">https://www.epa.gov/sites/default/files/2021-04/documents/ejscreen_technical_document.pdf</a></p></td>
-<td>january 2026</td>
+<td>January 2026</td>
 <td></td>
 <td>Yes</td>
 </tr>

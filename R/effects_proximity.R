@@ -32,7 +32,9 @@ effects_proximity <- function(sf_obj, points, dist) {
 
   # group by prisons and calc final scores
   prison_scores <- prison_scores %>%
-    mutate(distance = as.numeric(distance) / 1000) %>%
+    mutate(distance = as.numeric(distance) / 1000,
+           distance = if_else(distance == 0, 0.001, distance) # 1m min; intersection = max weight)
+    ) %>% 
     group_by(FACILITYID) %>%
     summarize(proximity_score = sum(1 / distance)) %>%
     st_drop_geometry()
