@@ -16,22 +16,24 @@ QA masking uses QA_PIXEL bitmask:
   Bit 5 (Cloud) — all must be 0 for clear pixels.
   Also filter to PROCESSING_LEVEL == 'L2SP' to ensure ST band is populated.
 
+Reduction strategy: annual summer composites (mean + count) per prison polygon.
+One reduceRegions call per year rather than per image for performance.
+
 @author: ccmothes (updated from MODIS to Landsat)
 """
 
 # set up earth engine
 import ee
 # ee.Authenticate()
-ee.Initialize(project = "ee-ccmothes")
+ee.Initialize(project="ee-ccmothes")
 
 
 # ---- Configuration --------------------------------------------------------
 
-# Date range: summer months June-August, 2022-2025
-startDate = "2022-06-01"
-endDate = "2025-08-31"
+# Years to process
+years = list(range(2019, 2026))  # 2019, 2020, 2021, 2022, 2023, 2024, 2025
 
-# Summer month filter
+# Summer month filter (June-August)
 summerStart = 6
 summerEnd = 8
 
@@ -48,14 +50,14 @@ def cloudMask(image):
     qa = image.select('QA_PIXEL')
     # Bits: 1=Dilated Cloud, 3=Cloud Shadow, 4=Snow, 5=Cloud
     dilated_cloud = 1 << 1
-    cloud_shadow = 1 << 3
-    snow = 1 << 4
-    cloud = 1 << 5
+    cloud_shadow  = 1 << 3
+    snow          = 1 << 4
+    cloud         = 1 << 5
 
     mask = (qa.bitwiseAnd(dilated_cloud).eq(0)
-            .And(qa.bitwiseAnd(cloud_shadow).eq(0))
-            .And(qa.bitwiseAnd(snow).eq(0))
-            .And(qa.bitwiseAnd(cloud).eq(0)))
+              .And(qa.bitwiseAnd(cloud_shadow).eq(0))
+              .And(qa.bitwiseAnd(snow).eq(0))
+              .And(qa.bitwiseAnd(cloud).eq(0)))
     return image.updateMask(mask)
 
 
@@ -79,75 +81,85 @@ def applySTQualityMask(image):
     return image.select('LST_Day').updateMask(quality_mask)
 
 
-# ---- Import Landsat 8 and 9 ------------------------------------------------
-
-# Landsat 8 (April 2013 - present)
-landsat8 = (ee.ImageCollection('LANDSAT/LC08/C02/T1_L2')
-            .filterDate(ee.Date(startDate), ee.Date(endDate))
-            .filter(ee.Filter.calendarRange(summerStart, summerEnd, 'month'))
-            .filter(ee.Filter.eq('PROCESSING_LEVEL', 'L2SP')))
-
-# Landsat 9 (Feb 2022 - present)
-landsat9 = (ee.ImageCollection('LANDSAT/LC09/C02/T1_L2')
-            .filterDate(ee.Date(startDate), ee.Date(endDate))
-            .filter(ee.Filter.calendarRange(summerStart, summerEnd, 'month'))
-            .filter(ee.Filter.eq('PROCESSING_LEVEL', 'L2SP')))
-
-# Merge Landsat 8 and 9 into a single collection
-landsat_merged = landsat8.merge(landsat9)
-
-print(f"Total Landsat 8+9 images (summer {startDate} to {endDate}): "
-      f"{landsat_merged.size().getInfo()}")
-
-
-# ---- Apply processing functions --------------------------------------------
-
-lst_day_processed = (landsat_merged
-                     .map(cloudMask)
-                     .map(applySTScaleFactors)
-                     .map(applySTQualityMask))
-
-
 # ---- Import prison FeatureCollection from assets ---------------------------
 
 prisons = ee.FeatureCollection("projects/ee-ccmothes/assets/study_prisons_updated")
 
 
-# ---- Reduce over prison polygons ------------------------------------------
+# ---- Build annual composites and reduce ------------------------------------
 
-def reduceRegions(image):
-    """Calculate mean LST per prison polygon for a single image."""
-    LST_mean = image.reduceRegions(
+def process_year(year):
+    """
+    For a given year, build a summer LST composite (mean + count),
+    reduce over prison polygons, and return a FeatureCollection with
+    LST_mean, n_images, FACILITYID, and year.
+    """
+    start = f"{year}-06-01"
+    end   = f"{year}-08-31"
+
+    # Landsat 8
+    l8 = (ee.ImageCollection('LANDSAT/LC08/C02/T1_L2')
+          .filterDate(start, end)
+          .filter(ee.Filter.calendarRange(summerStart, summerEnd, 'month'))
+          .filter(ee.Filter.eq('PROCESSING_LEVEL', 'L2SP')))
+
+    # Landsat 9
+    l9 = (ee.ImageCollection('LANDSAT/LC09/C02/T1_L2')
+          .filterDate(start, end)
+          .filter(ee.Filter.calendarRange(summerStart, summerEnd, 'month'))
+          .filter(ee.Filter.eq('PROCESSING_LEVEL', 'L2SP')))
+
+    # Merge and apply QA/scaling pipeline
+    processed = (l8.merge(l9)
+                 .map(cloudMask)
+                 .map(applySTScaleFactors)
+                 .map(applySTQualityMask))
+
+    # Annual mean LST and pixel-wise image count (non-masked pixels)
+    mean_img  = processed.mean().rename('LST_mean')
+    count_img = processed.count().rename('n_images')
+
+    composite = mean_img.addBands(count_img).set('year', year)
+
+    # Single reduceRegions call for this year
+    reduced = composite.reduceRegions(
         collection=prisons,
-        reducer=ee.Reducer.mean(),
-        scale=30  # Landsat native resolution
+        reducer=ee.Reducer.mean(),  # applies to both bands
+        scale=30                    # Landsat native resolution
     )
 
-    def featureRefine(feature):
+    # Rename output bands, attach year, drop null results
+    def refine(feature):
         return (feature
-                .select(['mean', 'FACILITYID'], ['LST_mean', 'FACILITYID'])
-                .set('date', image.get('system:index')))
+                .select(['LST_mean', 'n_images', 'FACILITYID'])
+                .set('year', year))
 
-    # Remove features with null mean (no valid pixels in polygon)
-    return (LST_mean
-            .filter(ee.Filter.notNull(['mean']))
-            .map(featureRefine))
+    return (reduced
+            .filter(ee.Filter.notNull(['LST_mean']))
+            .map(refine))
 
 
-# Map over image collection and flatten
-daily_mean_lst = lst_day_processed.map(reduceRegions).flatten()
+# ---- Process all years and merge ------------------------------------------
+
+all_years = [process_year(y) for y in years]
+
+# Report collection sizes before export (optional — remove if slow)
+for y, fc in zip(years, all_years):
+    print(f"{y}: {fc.size().getInfo()} features")
+
+annual_lst = ee.FeatureCollection(all_years).flatten()
 
 
 # ---- Export to CSV ---------------------------------------------------------
 
 task = ee.batch.Export.table.toDrive(
-    collection=daily_mean_lst,
+    collection=annual_lst,
     folder="gee_exports",
-    description='prison_lst_landsat_daily_summer_2022_2025',
+    description='prison_lst_landsat_annual_summer_2019_2025',
     fileFormat='CSV'
 )
 
 task.start()
 
-print("Export task submitted: prison_lst_landsat_daily_summer_2022_2025")
-print(f"Check status at: https://code.earthengine.google.com/tasks")
+print("Export task submitted: prison_lst_landsat_annual_summer_2019_2025")
+print("Check status at: https://code.earthengine.google.com/tasks")
