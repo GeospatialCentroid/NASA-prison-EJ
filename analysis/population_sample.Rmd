@@ -1,0 +1,130 @@
+---
+title: "Test Sample Method"
+author: "Caitlin C. Mothes, PhD"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+Setup and read in data
+
+```{r}
+source('setup.R')
+
+pop <- rast("data/phase2/raw/population/ca_30m_pop_density_hrsl_2020.tif")
+
+# read in CA prisons
+prisons_ca <- read_sf("data/phase2/processed/prisons/study_prisons.gpkg") %>% filter(STATE == "CA")
+```
+
+Remove NAs
+```{r}
+# round values
+pop_rounded <- terra::round(pop)
+
+# drops 0s
+pop_rounded[pop_rounded == 0] <- NA
+
+# aggregate to approx pixel size of mean prison size (300m res)
+pop_aggregate <- terra::aggregate(pop_rounded, fact = 10, fun = "sum", na.rm = TRUE)
+```
+
+Map it out
+```{r}
+mapview(pop_aggregate, na.color = NA) + mapview(st_centroid(prisons_ca), color = "red")
+```
+
+
+
+## Method 1: convert to data frame
+
+Convert raster to probability weights and sample
+
+```{r}
+#conver to dataframe
+vals <- as.data.frame(pop_aggregate, cells = TRUE, na.rm = TRUE)
+colnames(vals) <- c("cell", "pop")
+
+#calculate weight column
+vals <- vals %>% 
+  filter(pop > 0) %>% 
+  mutate(prob = pop / sum(pop))
+
+# sample cells using weighted probabilities
+set.seed(123)
+sampled_cells <- sample(
+  x    = vals$cell,
+  size = 5000,
+  replace = FALSE,      # want unique locations
+  prob = vals$prob
+)
+```
+
+Convert sampled cells to spatial points
+```{r}
+coords <- xyFromCell(pop_aggregate, sampled_cells) %>%
+  as_tibble() %>%
+  rename(lon = x, lat = y)
+
+pts_sf <- st_as_sf(coords, coords = c("lon", "lat"), crs = crs(pop_aggregate))
+```
+
+Map out points
+```{r}
+mapview(pts_sf, col.regions = "red") + mapview(st_centroid(prisons_ca))
+```
+
+
+## Method 2: terra's spatsample
+
+```{r}
+pts_sf <- spatSample(
+  pop_aggregate,
+  size    = 5000,
+  method  = "weights",
+  replace = TRUE,
+  as.points = TRUE,
+  na.rm   = TRUE
+) %>%
+  st_as_sf()
+```
+
+
+## Method 3: `values()` instead of as.data.frame
+```{r}
+v <- values(pop_aggregate, na.rm = FALSE, mat = FALSE)  # returns a plain vector
+cells <- which(!is.na(v) & v > 0)
+probs <- v[cells]
+probs <- probs / sum(probs)
+sampled_cells <- sample(cells, 5000, replace = TRUE, prob = probs)
+```
+
+# Compare all methods
+```{r}
+library(bench)
+set.seed(123)
+
+bench::mark(
+  spatSample_method = {
+    spatSample(pop_aggregate, size = 5000, method = "weights", replace = FALSE,
+               as.points = TRUE, na.rm = TRUE)
+  },
+  values_method = {
+    v <- values(pop_aggregate, na.rm = FALSE, mat = FALSE) #return a vector
+    cells <- which(!is.na(v) & v > 0)
+    probs <- v[cells] / sum(v[cells])
+    sample(cells, 5000, replace = FALSE, prob = probs)
+  },
+  as.data.frame_method = {
+    vals <- as.data.frame(pop_aggregate, cells = TRUE, na.rm = TRUE)
+    vals$prob <- vals[[2]] / sum(vals[[2]])
+    sample(vals$cell, 5000, replace = TRUE, prob = vals$prob)
+  },
+  iterations = 1,
+  check = FALSE  # outputs differ in structure so skip equality check
+)
+```
+
