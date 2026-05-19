@@ -47,6 +47,7 @@ exposures_component <-
       folder    = pm25_folder,
       dist      = pm25_dist,
       id_column = id_column,
+      years = c(2021, 2023),
       out_path  = out_path
     )
     print("PM2.5 indicator calculated")

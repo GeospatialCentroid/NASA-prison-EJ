@@ -15,9 +15,9 @@ traffic_dist   <- if (exists("exposures_params")) exposures_params$traffic_dist 
 exposures_scores <- exposures_component(
   sf_obj           = ice,
   ozone_folder     = "data/phase2/raw/ozone/",
-  pm25_folder      = "data/phase2/raw/air_quality/pm2.5_sedac/",
-  pesticide_folder = "data/phase2/raw/pesticides/ferman-v1-pest-chemgrids-v1-01-geotiff",
-  traffic_file     = "data/processed/traffic_proximity/aadt_2023.RData",
+  pm25_folder      = "data/phase2/processed/PM2.5",
+  pesticide_folder = "data/phase2/raw/pesticide/PEST-CHEMGRIDS_v2/NC/",
+  traffic_file     = "data/phase2/processed/traffic/aadt_2023.RData",
   pm25_dist        = pm25_dist,
   pesticide_dist   = pesticide_dist,
   traffic_dist     = traffic_dist,
