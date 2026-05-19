@@ -29,7 +29,7 @@ flood_risk <- calc_flood_risk(
   data = prisons,
   dist = 1000,
   save = TRUE,
-  output_dir = "outputs/"
+  out_path = "outputs/"
 )
 
 ```
