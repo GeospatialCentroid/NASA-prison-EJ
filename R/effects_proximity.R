@@ -4,40 +4,45 @@
 #' distance (or the nearest feature if none within specified distance) each divided by its distance
 #' to target features and summed across each target feature
 #'
-#' @param sf_obj An sf object of all polygons to be assessed
-#' @param points An sf object of points to calculate proximity to
-#' @param dist The distance (in meters) to find features within
-
+#' @param sf_obj    An sf object of all polygons to be assessed
+#' @param points    An sf object of points to calculate proximity to
+#' @param dist      The distance (in meters) to find features within
+#' @param id_column A string specifying the name of the unique facility identifier column
+#'                  (e.g., "FACILITYID" for prisons, "object_id" for ICE detention facilities).
+#'                  Default is "FACILITYID".
+#'
 #' @return A tibble of proximity score for each polygon
-effects_proximity <- function(sf_obj, points, dist) {
+effects_proximity <- function(sf_obj, points, dist, id_column = "FACILITYID") {
+  
   # find all points w/in buffer
-  prison_dist <- sf_obj %>%
+  facility_dist <- sf_obj %>%
     mutate(find_points = st_is_within_distance(., points, dist = dist)) %>%
     unnest(find_points)
-
-
+  
   # IF none, find nearest
-  prison_nearest <- sf_obj %>%
-    # filter prisons dropped in dist calc (meaning no points within dist)
-    filter(!FACILITYID %in% prison_dist$FACILITYID) %>%
+  facility_nearest <- sf_obj %>%
+    # filter facilities dropped in dist calc (meaning no points within dist)
+    filter(!.data[[id_column]] %in% facility_dist[[id_column]]) %>%
     mutate(find_points = st_nearest_feature(., points))
-
+  
   # unnest list column
-  prison_scores <- bind_rows(prison_dist, prison_nearest) %>%
+  facility_scores <- bind_rows(facility_dist, facility_nearest) %>%
     unnest(find_points)
-
+  
   # calc distance
-  prison_scores$distance <- st_distance(prison_scores, points[prison_scores$find_points, ], by_element = TRUE)
-
-
-  # group by prisons and calc final scores
-  prison_scores <- prison_scores %>%
-    mutate(distance = as.numeric(distance) / 1000,
-           distance = if_else(distance == 0, 0.001, distance) # 1m min; intersection = max weight)
-    ) %>% 
-    group_by(FACILITYID) %>%
+  facility_scores$distance <- st_distance(
+    facility_scores, points[facility_scores$find_points, ], by_element = TRUE
+  )
+  
+  # group by facility and calc final scores
+  facility_scores <- facility_scores %>%
+    mutate(
+      distance = as.numeric(distance) / 1000,
+      distance = if_else(distance == 0, 0.001, distance) # 1m min; intersection = max weight
+    ) %>%
+    group_by(!!sym(id_column)) %>%
     summarize(proximity_score = sum(1 / distance)) %>%
     st_drop_geometry()
-
-  return(prison_scores)
+  
+  return(facility_scores)
 }

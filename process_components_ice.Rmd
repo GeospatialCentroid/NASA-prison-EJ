@@ -61,7 +61,7 @@ jobRunScript(
 )
 ```
 
-*Note, this one takes a long time due to the traffic_proximity calculation. Due to this, switching to running individual indicators.*
+*Note, this one takes a long time due to the traffic_proximity calculation. Due to this, ran traffic proximity independently.*
 
 ```{r}
 # run exposures component
