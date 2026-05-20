@@ -30,42 +30,6 @@ If you want to change any of the default settings for each indicator (e.g., buff
 
 You can also run the indicator functions individually as opposed to as component scores (see 'process_indicators.Rmd').
 
-### Run component functions
-
-**Some of these functions take a long time (days). To speed up the process and run these scripts in the background (so you can still use your R session) go to the** [**Run as background jobs**] **section below.**
-
-```{r}
-# calculate climate component
-climate_scores <- climate_component(
-  prisons = prisons,
-  fire_file = "data/raw/wildfire/whp2020_GeoTIF/",
-  heat_risk_file = "data/processed/heat_exposure/lst_average.csv",
-  canopy_cover_folder = "data/processed/canopy_cover/",
-  save = TRUE,
-  out_path = "outputs/"
-)
-```
-
-```{r}
-# calculate environmental exposures component
-exposures_scores <- exposures_component(prisons = prisons, 
-                                        ozone_folder = "data/raw/air_quality/o3_daily/",
-                                        pm25_folder = "data/raw/air_quality/pm2.5_sedac/",
-                                        pesticide_folder = "data/raw/pesticides/ferman-v1-pest-chemgrids-v1-01-geotiff",
-                                        traffic_file = "data/processed/traffic_proximity/aadt_2018.RData",
-                                        save = TRUE, 
-                                        out_path = "outputs/")
-```
-
-```{r}
-# calculate environmental effects component
-effects_scores <- effects_component(prisons = prisons, 
-                                    rmp_file = "data/raw/EPA_RMP/EPA_Emergency_Response_(ER)_Risk_Management_Plan_(RMP)_Facilities.csv",
-                                    npl_file = "data/processed/npl_addresses_geocoded_arc_sf.csv",
-                                    haz_file = "data/processed/hazardous_waste/TSD_LQGs.csv",
-                                    save = TRUE, out_path = "outputs/")
-```
-
 ### Run as background jobs
 
 There are three job scripts, one for each component in the 'jobs/' folder. Running the code below will execute these scripts as background jobs, which will allow you to keep using R, show the progress of each script, and spread the work across more cores.
@@ -88,28 +52,18 @@ library(rstudioapi)
 #
 # Run those scripts from your Positron terminal and copy them over from your Google Drive to "data/ice/"
 
-# Set parameters for climate component job
-climate_params <- list(
-  flood_dist = 1000,  # buffer distance in meters for flood risk calculation
-  fire_dist = 1000 # buffer distance for wildfire risk calculation
-)
 # run climate component
 jobRunScript(
-  path = "jobs/climate_comp_job.R",
-  name = "climate_component",
+  path       = "jobs/climate_comp_job.R",
+  name       = "climate_component",
   workingDir = getwd(),
-  exportEnv = "climate_env"
+  exportEnv  = "climate_env"
 )
 ```
 
-```{r}
-# set parameters for exposures component job
-exposures_params <- list(
-  pm25_dist      = 1000,
-  pesticide_dist = 0,    # kept at 0; pesticide raster is ~5km resolution
-  traffic_dist   = 500
-)
+*Note, this one takes a long time due to the traffic_proximity calculation. Due to this, switching to running individual indicators.*
 
+```{r}
 # run exposures component
 jobRunScript(
   path = "jobs/exposures_comp_job.R",

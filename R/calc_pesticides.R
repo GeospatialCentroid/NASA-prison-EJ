@@ -43,8 +43,9 @@ calc_pesticides <- function(sf_obj,
   layer_H <- paste0("apr_H_year=", year)
   layer_L <- paste0("apr_L_year=", year)
   
-  # --- 3. Generate pesticide mean rasters and sum across compounds -----------
-  rast_mean <- list()
+  # --- 3. Write per-compound mean rasters to temp files -----------------------
+  tmp_dir <- file.path(tempdir(), "pesticide_tmp")
+  dir.create(tmp_dir, showWarnings = FALSE)
   
   pb <- progress::progress_bar$new(
     format = "  [:bar] :current/:total | :percent | ETA: :eta",
@@ -52,6 +53,8 @@ calc_pesticides <- function(sf_obj,
     clear = FALSE,
     width = 70
   )
+  
+  tmp_files <- vector("character", length(pest_files))
   
   for (i in seq_along(pest_files)) {
     
@@ -64,14 +67,25 @@ calc_pesticides <- function(sf_obj,
     rast_H[rast_H < 0] <- 0
     rast_L[rast_L < 0] <- 0
     
-    rast_mean[[i]] <- mean(rast_H, rast_L)
+    rast_mean_i <- mean(rast_H, rast_L)
+    
+    tmp_files[i] <- file.path(tmp_dir, paste0("pest_", i, ".tif"))
+    terra::writeRaster(rast_mean_i, tmp_files[i], overwrite = TRUE)
+    
+    rm(r, rast_H, rast_L, rast_mean_i)
     
     pb$tick()
   }
   
-  total_sum <- sum(terra::rast(rast_mean), na.rm = TRUE)
+  # --- 4. Stack from disk and sum with na.rm = TRUE ---------------------------
+  message("Summing across compounds...")
+  total_sum <- terra::rast(tmp_files) %>% 
+    terra::app(fun = "sum", na.rm = TRUE)
   
-  # --- 4. Extract total application rate within each facility buffer ---------
+  # clean up temp files
+  unlink(tmp_dir, recursive = TRUE)
+  
+  # --- 5. Extract total application rate within each facility buffer ---------
   if (terra::crs(sf_obj) != terra::crs(total_sum)) {
     sf_obj <- sf::st_transform(sf_obj, crs = terra::crs(total_sum))
   }

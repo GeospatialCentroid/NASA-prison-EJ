@@ -29,7 +29,13 @@ climate_component <-
            out_path = "outputs/") {
     
     ## FLOOD RISK -------------------------------
-    flood_risk <- calc_flood_risk(sf_obj, dist = flood_dist, out_path = out_path)
+    flood_risk <- calc_flood_risk(
+      sf_obj,
+      dist = flood_dist,
+      id_column = id_column,
+      save = save,
+      out_path = out_path
+    )
     print("Flood Risk indicator calculated")
     
     ## WILDFIRE RISK -----------------------------
@@ -39,6 +45,7 @@ climate_component <-
       dist = fire_dist,
       conus_only = conus_only,
       id_column = id_column,
+      save = save,
       out_path = out_path
     )
     print("Wildfire risk indicator calculated")
@@ -78,7 +85,9 @@ climate_component <-
         .names = "{col}_{fn}"
       )) %>%
       # need to inverse canopy cover since high value is good
-      mutate(percent_tree_cover_pcntl = cume_dist(desc(percent_tree_cover)) * 100) %>%
+      mutate(across(matches("canopy_cover|tree_cover", ignore.case = TRUE),
+                    ~ cume_dist(desc(.)) * 100,
+                    .names = "{.col}_pcntl")) %>%
       rowwise() %>%
       # calculate climate component score (average all indicator percentile values per facility)
       mutate(climate_score = gm_mean(c_across(contains("pcntl"))))
