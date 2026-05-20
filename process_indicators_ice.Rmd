@@ -110,8 +110,12 @@ traffic_prox <- calc_traffic_proximity(
 ```{r}
 # calculate Risk Management Plan (RMP) facility proximity
 rmp_prox <- calc_rmp_proximity(
-  sf_obj = prisons,
-  file = "data/phase2/raw/RMP/EPA RMP Spreadsheets — The Data Liberation Project - Facilities.csv"
+  sf_obj = ice_facilities,
+  file = "data/phase2/raw/RMP/EPA RMP Spreadsheets — The Data Liberation Project - Facilities.csv",
+  dist = 5000,
+  id_column = "object_id",
+  save = TRUE,
+  out_path = "outputs/ice/"
 )
 
 ```
@@ -121,8 +125,12 @@ rmp_prox <- calc_rmp_proximity(
 ```{r}
 # calculate NPL facility proximity
 npl_prox <- calc_npl_proximity(
-  sf_obj = prisons,
-  file = "data/phase2/processed/NPL/NPL_arc_geocode.shp"
+  sf_obj = ice_facilities,
+  file = "data/phase2/processed/NPL/NPL_arc_geocode.shp",
+  dist = 5000,
+  id_column = "object_id",
+  save = TRUE,
+  out_path = "outputs/ice/"
 )
 ```
 
@@ -131,8 +139,12 @@ npl_prox <- calc_npl_proximity(
 ```{r}
 # calculate Haz waste facility proximity
 haz_prox <- calc_haz_waste_proximity(
-  sf_obj = prisons,
-  file = "data/phase2/processed/hazardous_waste/TSD_LQGs.csv"
+  sf_obj = ice_facilities,
+  file = "data/phase2/processed/hazardous_waste/TSD_LQGs.csv",
+  dist = 5000,
+  id_column = "object_id",
+  save = TRUE,
+  out_path  = "outputs/ice/"
 )
 
 ```
@@ -148,23 +160,23 @@ Note that heat exposure and canopy cover were saved in the 'data/processed' fold
 ```{r}
 ## climate scores -------------
 
-flood_risk <- read_csv("outputs/flood_risk_2026-04-03.csv") %>%
-  select(FACILITYID, flood_risk = flood_risk_percent)
+flood_risk <- read_csv("outputs/ice/flood_risk_2026-05-20.csv") %>%
+  select(object_id, flood_risk = flood_risk_percent)
 
-wildfire_risk <- read_csv("outputs/wildfire_risk_2026-02-12.csv")
+wildfire_risk <- read_csv("outputs/ice/wildfire_risk_2026-05-20.csv")
 
-heat_exp <- read_csv("data/phase2/processed/lst/lst_MODIS_average_2026-04-29.csv")
+heat_exp <- read_csv("data/ice/ice_lst_daily_MODIS_2026-05-19.csv") %>% 
+  group_by(object_id) %>%
+  summarise(lst_avg = median(LST_mean, na.rm = TRUE))
 
-canopy_cover <- read_csv("data/phase2/processed/canopy_cover/prison_canopy_AK.csv") %>%
-  bind_rows(read_csv("data/phase2/processed/canopy_cover/prison_canopy_HI.csv")) %>%
-  bind_rows(read_csv("data/phase2/processed/canopy_cover/prison_canopy_CONUS.csv")) %>% 
+canopy_cover <- read_csv("data/ice/ice_canopy_2026-05-19.csv") %>%
   rename(percent_tree_cover = NLCD_Percent_Tree_Canopy_Cover)
 
 
 climate_scores <- list(flood_risk, wildfire_risk, heat_exp, canopy_cover) %>%
   # convert FACILITYID to character for all to make sure they join
-  purrr::map(~ .x %>% mutate(FACILITYID = as.character(FACILITYID))) %>% 
-  purrr::reduce(left_join, by = "FACILITYID") %>%
+  purrr::map(~ .x %>% mutate(object_id = as.character(object_id))) %>% 
+  purrr::reduce(left_join, by = "object_id") %>%
   # calculate percentile columns for each raw indicator
   mutate(across(
     where(is.numeric),
@@ -181,18 +193,18 @@ climate_scores <- list(flood_risk, wildfire_risk, heat_exp, canopy_cover) %>%
 #### Environmental Exposures Scores
 
 ```{r}
-ozone <- read_csv("outputs/ozone_2026-04-17.csv")
+ozone <- read_csv("outputs/ice/ozone_2026-05-20.csv")
 
-pm25 <- read_csv("outputs/pm25_2026-03-26.csv")
+pm25 <- read_csv("outputs/ice/pm25_2026-05-20.csv")
 
-pesticides <- read_csv("outputs/pesticides_2026-04-27.csv")
+pesticides <- read_csv("outputs/ice/pesticides_2026-05-20.csv")
 
-traffic <- read_csv("outputs/traffic_proximity_2026-04-14.csv")
+traffic <- read_csv("outputs/ice/traffic_proximity_2026-05-20.csv")
 
 exposure_scores <- list(ozone, pm25, pesticides, traffic) %>%
   # convert FACILITYID to character for all to make sure they join
-  purrr::map(~ .x %>% mutate(FACILITYID = as.character(FACILITYID))) %>% 
-  purrr::reduce(left_join, by = "FACILITYID") %>%
+  purrr::map(~ .x %>% mutate(object_id = as.character(object_id))) %>% 
+  purrr::reduce(left_join, by = "object_id") %>%
   # calculate percentile columns for each raw indicator
   dplyr::mutate(across(
     where(is.numeric),
@@ -209,16 +221,16 @@ exposure_scores <- list(ozone, pm25, pesticides, traffic) %>%
 #### Environmental Effects Scores
 
 ```{r}
-npl <- read_csv("outputs/npl_proximity_2026-03-11.csv")
+npl <- read_csv("outputs/ice/npl_proximity_2026-05-20.csv")
 
-rmp <- read_csv("outputs/rmp_proximity_2026-04-29.csv")
+rmp <- read_csv("outputs/ice/rmp_proximity_2026-05-20.csv")
 
-haz <- read_csv("outputs/hazardous_waste_proximity_2026-04-29.csv")
+haz <- read_csv("outputs/ice/hazardous_waste_proximity_2026-05-20.csv")
 
 effects_scores <- list(npl, rmp, haz) %>%
-  purrr::reduce(left_join, by = "FACILITYID") %>%
+  purrr::reduce(left_join, by = "object_id") %>%
   # make facility ID character
-  mutate(FACILITYID = as.character(FACILITYID)) %>%
+  mutate(object_id = as.character(object_id)) %>%
   # calculate percentile columns for each raw indicator
   dplyr::mutate(across(
     where(is.numeric),
@@ -236,21 +248,21 @@ Now using the component scores data frames we can create a single, final data fr
 
 ```{r}
 final_df <- list(climate_scores, exposure_scores, effects_scores) %>%
-  purrr::reduce(left_join, by = "FACILITYID") %>%
+  purrr::reduce(left_join, by = "object_id") %>%
   # remove rowwise
   ungroup() %>%
   mutate(
     final_risk_score = rowMeans(select(., contains("score"))),
     final_risk_score_pcntl = cume_dist(final_risk_score) * 100
   ) %>% 
-  # join with original prison facility metadata
-  mutate(FACILITYID = as.character(FACILITYID)) %>% 
-  left_join(prisons, by = "FACILITYID")
+  # join with original ice facility metadata
+  mutate(object_id = as.character(object_id)) %>% 
+  left_join(ice_facilities %>% mutate(object_id = as.character(object_id)), by = "object_id")
 
 # save as shapefile and csv
-final_df %>% st_as_sf() %>% write_sf(paste0("outputs/final_df_", Sys.Date(), ".gpkg"))
+final_df %>% st_as_sf() %>% write_sf(paste0("outputs/ice/final_df_", Sys.Date(), ".gpkg"))
 
 final_df %>% 
   select(-geom) %>% 
-  write_csv(paste0("outputs/final_df_", Sys.Date(), ".csv"))
+  write_csv(paste0("outputs/ice/final_df_", Sys.Date(), ".csv"))
 ```
