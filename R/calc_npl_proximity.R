@@ -25,7 +25,7 @@ calc_npl_proximity <- function(sf_obj,
   
   if (extension == "csv") {
     
-    npl <- read_sf(file) %>%
+    npl <- read_csv(file) %>%
       # keep only listed and proposed NPL
       filter(str_detect(npl_status, "Final|Proposed")) %>%
       separate(geometry, into = c("Long", "Lat"), sep = ",") %>%
