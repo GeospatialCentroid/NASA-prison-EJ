@@ -41,7 +41,9 @@ calc_npl_proximity <- function(sf_obj,
     
     npl <- read_sf(file) %>%
       filter(str_detect(NPL_Status, "Final|Proposed")) %>%
-      st_transform(crs = st_crs(sf_obj))
+      st_transform(crs = st_crs(sf_obj)) %>% 
+      # remove any empty geometries
+      filter(!st_is_empty(st_geometry(.)))
     
   }
   
