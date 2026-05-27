@@ -4,16 +4,19 @@
 # set up environment -----------------
 source("setup.R")
 
-# read in processed prison polygons
-prisons <- read_sf("data/processed/prisons/study_prisons.shp")
+# read in processed facility polygons/points
+ice <- read_sf("data/ice/ice_detention_facilities.gpkg")
 
 
-# calculate climate component
 climate_scores <- climate_component(
-  prisons = prisons,
-  fire_file = "data/raw/wildfire/whp2020_GeoTIF/",
-  heat_risk_file = "data/processed/heat_exposure/lst_average.csv",
-  canopy_cover_folder = "data/processed/canopy_cover/",
-  save = TRUE,
-  out_path = "outputs/"
+  sf_obj               = ice,
+  fire_file            = "data/phase2/raw/wildfire_risk/Data/whp2023_GeoTIF/",
+  heat_risk_file       = "data/ice/ice_lst_daily_MODIS_2026-05-19.csv",
+  canopy_cover_folder  = "data/ice/ice_canopy_2026-05-19.csv",
+  flood_dist           = 1000,
+  fire_dist            = 1000,
+  conus_only           = TRUE,
+  id_column            = "object_id",
+  save                 = TRUE,
+  out_path             = "outputs/ice/"
 )

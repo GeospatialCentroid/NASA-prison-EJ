@@ -1,0 +1,185 @@
+---
+title: "ICE Detention Facilities: Data Pull & Review"
+author: ""
+date: "`r Sys.Date()`"
+output:
+  html_document:
+    toc: true
+    toc_float: true
+    df_print: paged
+    code_folding: show
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, message = FALSE, warning = FALSE)
+```
+
+## Setup
+
+```{r packages}
+library(sf)
+library(tidyverse)
+library(janitor)
+library(mapview)
+library(httr2)
+library(tigris)
+```
+
+## Pull Data from FeatureServer
+
+This layer has a max record count of 1,000 per request, so we paginate
+using `resultOffset` until all features are retrieved.
+
+```{r pull-data}
+base_url <- "https://services1.arcgis.com/SIYkiqjmENweC50g/ArcGIS/rest/services/rolling_updated_feb12/FeatureServer/0/query"
+
+ice_facilities <- st_read(paste0(
+    base_url,
+    "?where=1%3D1",
+    "&outFields=*",
+    "&returnGeometry=true",
+    "&outSR=4326",
+    "&f=geojson")
+)
+
+message("Total features retrieved: ", nrow(ice_facilities))
+```
+
+## Initial Review
+
+### Dimensions & Field Names
+
+```{r review-dims}
+dim(ice_facilities)
+names(ice_facilities)
+```
+
+### Field Types
+
+```{r review-types}
+glimpse(ice_facilities)
+```
+
+### Missing Values by Field
+
+```{r review-na}
+ice_facilities |>
+  st_drop_geometry() |>
+  summarise(across(everything(), ~ sum(is.na(.)))) |>
+  pivot_longer(everything(), names_to = "field", values_to = "n_missing") |>
+  mutate(pct_missing = round(n_missing / nrow(ice_facilities) * 100, 1)) |>
+  arrange(desc(n_missing))
+```
+
+### Detainment Summary Statistics
+
+```{r review-detainment}
+ice_facilities |>
+  st_drop_geometry() |>
+  select(Total_Detainment, Total_Female_Detainment, Total_Male_Detainment, Total_Non_Criminal, FY26_ALOS) |>
+  summary()
+```
+
+### Facility Type Breakdown
+
+```{r review-types-table}
+ice_facilities |>
+  st_drop_geometry() |>
+  count(Type_Detailed, sort = TRUE)
+```
+
+### Last Updated Distribution
+
+```{r review-dates}
+ice_facilities |>
+  st_drop_geometry() |>
+  mutate(last_updated = as.POSIXct(last_updated / 1000, origin = "1970-01-01", tz = "UTC") |> as.Date()) |>
+  count(last_updated, sort = TRUE)
+```
+
+### Geometry Check
+
+```{r review-geometry}
+# CRS
+st_crs(ice_facilities)
+
+# Any invalid geometries?
+any(!st_is_valid(ice_facilities))
+
+# Any empty geometries?
+any(st_is_empty(ice_facilities))
+
+# Bounding box sanity check (should be roughly CONUS + territories)
+st_bbox(ice_facilities)
+```
+
+### Interactive Map
+
+```{r review-map}
+mapview(
+  ice_facilities,
+  zcol       = "Total_Detainment",
+  layer.name = "Total Detainment",
+  cex        = 4
+)
+```
+
+### Coordinate Outliers
+
+Points outside US bounding box (Puerto Rico and Guam)
+
+```{r review-coords}
+coords <- ice_facilities |>
+  st_coordinates() |>
+  as_tibble() |>
+  rename(lon = X, lat = Y)
+
+ice_facilities |>
+  st_drop_geometry() |>
+  bind_cols(coords) |>
+  filter(lon < -180 | lon > -60 | lat < 15 | lat > 72) |>
+  select(Name, Full_Address, lon, lat)
+```
+
+
+
+## Clean & Standardize
+
+```{r clean}
+# need to filter to CONUS
+conus <- states(cb = TRUE) |>
+  filter(!STUSPS %in% c("AK", "HI", "PR", "GU", "VI", "MP", "AS")) |>
+  st_union() |>
+  st_transform(st_crs(ice_facilities))
+
+ice_clean <- ice_facilities |>
+  st_filter(conus) |>
+  clean_names() |>                          # snake_case field names
+  mutate(
+    last_updated = as.POSIXct(last_updated / 1000, origin = "1970-01-01", tz = "UTC") |> as.Date()) |>
+  # Reproject to EPSG:5070 (Albers Equal Area) — standard for this project
+  st_transform(5070)
+```
+
+
+## Save to data/ice/
+
+```{r save}
+out_dir <- here::here("data", "ice")
+dir.create(out_dir, recursive = TRUE, showWarnings = FALSE)
+
+out_path <- file.path(out_dir, "ice_detention_facilities.gpkg")
+
+st_write(ice_clean, out_path, delete_dsn = TRUE, append = FALSE)
+
+message("Saved: ", out_path)
+message("Features: ", nrow(ice_clean))
+message("CRS: ", st_crs(ice_clean)$input)
+
+# also save as csv for GEE upload
+ice_clean %>%
+  mutate(wkt = st_as_text(geometry)) %>% # use 'wkt' as geometry info for GEE upload
+  st_drop_geometry() %>%
+  write_csv("data/ice/ice_detention_centers.csv")
+```
+

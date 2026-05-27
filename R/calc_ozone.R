@@ -1,13 +1,13 @@
 #' Calculate ozone exposure using EPA FAQSD Downscaler data
 #'
 #' Computes the 3-year average of annual 4th-highest daily 8-hour maximum ozone
-#' (MDA8) for each prison polygon using the EPA Fused Air Quality Surface Using
+#' (MDA8) for each facility polygon using the EPA Fused Air Quality Surface Using
 #' Downscaling (FAQSD) product.
 #'
 #' FAQSD fuses AQS monitor observations with 12 km CMAQ model output via a
 #' Bayesian space-time downscaler. Output is one value per 2010 Census tract
 #' centroid per day. Spatial matching finds the nearest tract centroid to the
-#' closest point on each prison polygon boundary (not the polygon centroid),
+#' closest point on each facility polygon boundary (not the polygon centroid),
 #' then pulls that tract's mean MDA8 value.
 #'
 #' Expected file path structure:
@@ -18,29 +18,33 @@
 #'   Columns: Date, FIPS, Longitude, Latitude,
 #'            ozone_daily_8hour_maximum(ppb), ozone_daily_8hour_maximum_stderr(ppb)
 #'
-#' @param sf_obj   An sf object of prison polygons (any CRS; reprojected internally).
-#' @param years    Integer vector of years to average across.
-#'                 Default c(2019, 2021, 2022) skips 2020 (anomalous COVID emissions).
-#' @param data_dir Path to folder containing the FAQSD .txt.gz files.
-#'                 Default "data/phase2/raw/ozone".
-#' @param save     Logical. Save results as CSV. Default TRUE.
-#' @param out_path Directory for the saved CSV. Default "outputs/".
+#' @param sf_obj    An sf object of facility polygons (any CRS; reprojected internally).
+#' @param folder    Path to folder containing the FAQSD .txt.gz files.
+#'                  Default "data/phase2/raw/ozone".
+#' @param years     Integer vector of years to average across.
+#'                  Default c(2019, 2021, 2022) skips 2020 (anomalous COVID emissions).
+#' @param id_column A string specifying the name of the unique facility identifier column
+#'                  (e.g., "FACILITYID" for prisons, "object_id" for ICE detention facilities).
+#'                  Default is "FACILITYID".
+#' @param save      Logical. Save results as CSV. Default TRUE.
+#' @param out_path  Directory for the saved CSV. Default "outputs/".
 #'
 #' @return A tibble with one row per facility:
-#'   FACILITYID, mean_ozone (ppb), matched_fips, dist_to_tract_m
+#'   {id_column}, mean_ozone (ppb), matched_fips, dist_to_tract_m
 #'
 #' @examples
 #' \dontrun{
 #' prisons <- sf::st_read("study_prisons.shp")
-#' result  <- calc_ozone_faqsd(prisons)
-#' result  <- calc_ozone_faqsd(prisons, years = c(2019, 2021, 2022),
-#'                             data_dir = "data/phase2/raw/ozone")
+#' result  <- calc_ozone(prisons)
+#' result  <- calc_ozone(prisons, years = c(2019, 2021, 2022),
+#'                       folder = "data/phase2/raw/ozone")
 #' }
 
 calc_ozone <- function(
     sf_obj,
+    folder   = "data/phase2/raw/ozone",
     years    = c(2019, 2021, 2022),
-    data_dir = "data/phase2/raw/ozone",
+    id_column = "FACILITYID",
     save     = TRUE,
     out_path = "outputs/"
 ) {
@@ -56,7 +60,7 @@ calc_ozone <- function(
   load_year <- function(year) {
     
     filepath <- file.path(
-      data_dir,
+      folder,
       sprintf("%d_ozone_daily_8hour_maximum.txt.gz", year)
     )
     if (!file.exists(filepath))
@@ -79,8 +83,6 @@ calc_ozone <- function(
     ) |>
       janitor::clean_names()
     
-    # Coerce after clean_names() as a safety net — handles any header variants
-    # where col_types spec didn't fire (e.g. extra whitespace in original names)
     df <- df |>
       dplyr::mutate(
         latitude                             = as.numeric(latitude),
@@ -101,7 +103,6 @@ calc_ozone <- function(
         paste(names(df), collapse = ", ")
       ))
     
-    # Keep only columns needed downstream
     df |> dplyr::select(fips, latitude, longitude, ozone_daily_8hour_maximum_ppb)
   }
   
@@ -109,8 +110,6 @@ calc_ozone <- function(
   all_years_data <- purrr::map(years, load_year)
   
   # -- 3. Compute 4th-highest MDA8 per tract per year --------------------------
-  # Mirrors EPA NAAQS design value methodology.
-  # Uses data.table for speed on 30M+ row datasets.
   message("\nComputing 4th-highest MDA8 per census tract per year...")
   
   fourth_highest <- function(x) {
@@ -145,18 +144,17 @@ calc_ozone <- function(
     sf::st_as_sf(coords = c("longitude", "latitude"), crs = 4326) |>
     sf::st_transform(5070)
   
-  # -- 6. Project prison polygons to Albers Equal Area -------------------------
-  message("Projecting prison polygons...")
-  prisons_proj <- sf::st_transform(sf_obj, 5070)
+  # -- 6. Project facility polygons to Albers Equal Area -----------------------
+  message("Projecting facility polygons...")
+  facilities_proj <- sf::st_transform(sf_obj, 5070)
   
-  # -- 7. Find nearest tract centroid to each prison boundary ------------------
-  message("Matching prison boundaries to nearest tract centroids...")
+  # -- 7. Find nearest tract centroid to each facility boundary ----------------
+  message("Matching facility boundaries to nearest tract centroids...")
   
-  nearest_idx <- sf::st_nearest_feature(prisons_proj, tracts_sf)
+  nearest_idx <- sf::st_nearest_feature(facilities_proj, tracts_sf)
   
-  # Distance from polygon boundary to matched tract centroid
   dist_m <- sf::st_distance(
-    prisons_proj,
+    facilities_proj,
     tracts_sf[nearest_idx, ],
     by_element = TRUE
   ) |> as.numeric()
@@ -171,10 +169,10 @@ calc_ozone <- function(
   # -- 8. Assemble output -------------------------------------------------------
   result <- sf::st_drop_geometry(sf_obj) |>
     dplyr::transmute(
-      FACILITYID      = FACILITYID,
-      mean_ozone      = mean_ozone_tract$mean_ozone[nearest_idx],
-      matched_fips    = mean_ozone_tract$fips[nearest_idx],
-      dist_to_tract_m = round(dist_m)
+      !!sym(id_column) := !!sym(id_column),
+      mean_ozone       = mean_ozone_tract$mean_ozone[nearest_idx],
+      matched_fips     = mean_ozone_tract$fips[nearest_idx],
+      dist_to_tract_m  = round(dist_m)
     )
   
   message(sprintf(
