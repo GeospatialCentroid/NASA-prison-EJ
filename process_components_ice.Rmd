@@ -1,0 +1,109 @@
+---
+title: "Code to process all compoments and create final data frame for ICE detention centers"
+author: "Caitlin C. Mothes, PhD"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+## Process components
+
+First we have to set up our environment, which is what the "setup.R" script is designed to do. This script will install (if necessary) and load all required packages, source all the functions needed for this workflow, and create a directory to save all outputs in.
+
+```{r}
+source("setup.R")
+```
+
+Also need to load in the spatial (sf) object to perform calculations on:
+
+```{r}
+# read in processed ICE facilities
+ice_facilities <- read_sf("data/ice/ice_detention_facilities.gpkg")
+```
+
+All indicator functions are grouped into three components: climate, environmental exposures and environmental effects. To learn more about this methodology and these component groupings you can read the project description (proposal submitted to and funded by NASA) in the 'doc/' folder titled "NASA_EEJ_STM_Mothes.pdf".
+
+Each component has its own function, which will run each of the individual indicator functions, calculate indicator percentiles, and calculate overall component scores.
+
+If you want to change any of the default settings for each indicator (e.g., buffer distance, year range), you will have to edit the component function (in the 'R/' folder)
+
+**Note:** Some of these functions (e.g., calculating flood risk and traffic proximity) take a very long time to process (a couple of days), so consider that when executing these functions. Using a machine with a lot of memory/RAM is recommended.
+
+You can also run the indicator functions individually as opposed to as component scores (see 'process_indicators.Rmd').
+
+### Run as background jobs
+
+There are three job scripts, one for each component in the 'jobs/' folder. Running the code below will execute these scripts as background jobs, which will allow you to keep using R, show the progress of each script, and spread the work across more cores.
+
+To do so you will need to install and load the {[rstudioapi](https://rstudio.github.io/rstudioapi/index.html)} package
+
+```{r}
+library(rstudioapi)
+```
+
+```{r}
+# NOTE: Before running the climate component job, ensure the following
+# GEE-derived files have been exported and downloaded to the correct paths:
+#
+#   Heat risk (LST):    python/calc_myd11_lst_day.py
+#   → Move downloaded output to: data/ice/
+#
+#   Canopy cover:       python/calc_canopy_cover.py  
+#   → Move downloaded output to: data/ice/
+#
+# Run those scripts from your Positron terminal and copy them over from your Google Drive to "data/ice/"
+
+# run climate component
+jobRunScript(
+  path       = "jobs/climate_comp_job.R",
+  name       = "climate_component",
+  workingDir = getwd(),
+  exportEnv  = "climate_env"
+)
+```
+
+*Note, this one takes a long time due to the traffic_proximity calculation. Due to this, ran traffic proximity independently.*
+
+```{r}
+# run exposures component
+jobRunScript(
+  path = "jobs/exposures_comp_job.R",
+  name = "exposures_component",
+  workingDir = getwd(),
+  exportEnv = "exposures_env"
+)
+```
+
+```{r}
+# run env effects component
+jobRunScript(
+  path = "jobs/effects_comp_job.R",
+  name = "effects_component",
+  workingDir = getwd(),
+  exportEnv = "effects_env"
+)
+
+```
+
+Finally, combine all component scores and calculate a single environmental risk metric:
+
+```{r}
+final_df <- list(climate_scores, exposure_scores, effects_scores) %>%
+  purrr::reduce(left_join, by = "FACILITYID") %>%
+  # remove rowwise
+  ungroup() %>%
+  mutate(
+    final_risk_score = rowMeans(select(., contains("score"))),
+    final_risk_score_pcntl = cume_dist(final_risk_score) * 100
+  )%>% 
+  # join with original prison facility metadata
+  mutate(FACILITYID = as.character(FACILITYID)) %>% 
+  left_join(prisons, by = "FACILITYID")
+
+# save as shapefile and csv
+final_df %>% st_as_sf() %>% write_sf(paste0("outputs/final_df_", Sys.Date(), ".shp"))
+
+final_df %>% 
+  select(-geometry) %>% 
+  write_csv(paste0("outputs/final_df_", Sys.Date(), ".csv"))
+
+```

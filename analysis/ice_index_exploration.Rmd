@@ -1,0 +1,1241 @@
+---
+title: "ICE Detention Facilities — Environmental Vulnerability Index: Exploration & QA"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output:
+  html_document:
+    theme: flatly
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: true
+    toc_depth: 3
+    number_sections: true
+    code_folding: hide
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo       = TRUE,
+  warning    = FALSE,
+  message    = FALSE,
+  fig.width  = 9,
+  fig.height = 5,
+  dpi        = 150,
+  out.width  = "100%"
+)
+```
+
+```{r packages}
+library(tidyverse)
+library(sf)
+library(scales)
+library(knitr)
+library(kableExtra)
+library(patchwork)
+library(janitor)
+library(ggridges)
+library(leaflet)
+library(leaflet.extras)
+library(glue)
+```
+
+---
+
+# Overview
+
+This report provides a structured QA and exploratory analysis of the ICE detention
+facility Environmental Vulnerability Index dataset. It is organized in three parts:
+
+1. **Data inventory & flags** — completeness, range checks, structural anomalies  
+2. **Indicator-level exploration** — distributions and outliers for each raw indicator  
+3. **Component & index summaries** — score distributions, facility rankings, cross-component patterns  
+
+```{r load-data}
+# ── Load data ──────────────────────────────────────────────────────────────────
+df <- read_csv("outputs/ice/final_df_2026-05-21.csv", show_col_types = FALSE) %>%
+  mutate(
+    type_detailed = factor(type_detailed),
+    last_updated  = as.Date(last_updated)
+  )
+
+df_sf <- read_sf("outputs/ice/final_df_2026-05-21.gpkg")
+
+n_facilities <- nrow(df)
+
+# ── Column groupings ───────────────────────────────────────────────────────────
+raw_climate  <- c("flood_risk", "wildfire_risk", "lst_avg", "percent_tree_cover")
+raw_exposure <- c("mean_ozone", "avg_pm25",
+                  "pesticide_mean_kg", "trafficProx")
+raw_effects  <- c("npl_prox", "rmp_prox", "haz_prox")
+raw_all      <- c(raw_climate, raw_exposure, raw_effects)
+
+pcntl_cols   <- names(df)[str_ends(names(df), "_pcntl")]
+score_cols   <- c("climate_score", "exposure_score", "effects_score",
+                  "final_risk_score", "final_risk_score_pcntl")
+
+cat(glue::glue("Dataset loaded: {n_facilities} facilities, {ncol(df)} columns\n"))
+
+# WGS84 version for leaflet (centroids for point plotting)
+df_wgs <- df_sf %>%
+  st_transform(4326) %>%
+  mutate(
+    lon = st_coordinates(st_centroid(st_geometry(.)))[,1],
+    lat = st_coordinates(st_centroid(st_geometry(.)))[,2]
+  )
+
+# Shared popup builder
+make_popup <- function(d, indicator_label, indicator_col, extra_cols = NULL) {
+  base <- glue::glue(
+    "<b>{d$name}</b><br>",
+    "<i>{d$type_detailed}</i><br>",
+    "{d$full_address}<br><hr>",
+    "<b>{indicator_label}:</b> {round(d[[indicator_col]], 3)}"
+  )
+  if (!is.null(extra_cols)) {
+    extras <- purrr::map_chr(extra_cols, ~ glue::glue("<br><b>{.x}:</b> {round(d[[.x]], 2)}"))
+    base <- paste0(base, paste(extras, collapse = ""))
+  }
+  base
+}
+
+# Shared risk colour palette (percentile 0-100)
+pal_risk <- colorNumeric("YlOrRd", domain = c(0, 100), na.color = "#aaaaaa")
+```
+
+---
+
+# Data Inventory & Quality Flags {.tabset}
+
+## Completeness
+
+```{r completeness}
+completeness <- df %>%
+  summarise(across(everything(), ~ sum(is.na(.)))) %>%
+   # remove metadata  column
+  select(-fy26_alos) %>% 
+  pivot_longer(everything(), names_to = "column", values_to = "n_missing") %>%
+  mutate(
+    pct_missing = n_missing / n_facilities,
+    # flag = case_when(
+    #   pct_missing == 1   ~ "⛔ ALL MISSING",
+    #   pct_missing >= 0.2 ~ "🔴 >20% missing",
+    #   pct_missing > 0    ~ "🟡 partial NA",
+    #   TRUE               ~ "✅ complete"
+    # )
+  ) %>%
+  arrange(desc(n_missing))
+
+completeness %>%
+  filter(n_missing > 0) %>%
+  mutate(pct_missing = percent(pct_missing, accuracy = 0.1)) %>%
+  kbl(caption = "Columns with any missing values") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE) %>%
+  column_spec(3, bold = TRUE
+              # color = ifelse(
+              #   completeness %>% filter(n_missing > 0) %>% pull(flag) == "⛔ ALL MISSING",
+              #   "red", "black")
+              )
+```
+
+
+## Range Checks
+
+```{r range-checks}
+# Expected ranges for raw indicators
+range_spec <- tribble(
+  ~column,            ~lo,   ~hi,    ~unit,
+  "flood_risk",         0,   100,   "% flooded footprint",
+  "wildfire_risk",      0,    NA,   "index (unbounded)",
+  "lst_avg",           20,    60,   "°C (LST)",
+  "percent_tree_cover", 0,   100,   "% canopy",
+  "mean_ozone",        20,    90,   "ppb",
+  "avg_pm25",           0,    50,   "µg/m³",
+  "pesticide_mean_kg",  0,    NA,   "kg (unbounded)",
+  "trafficProx",        0,    NA,   "IDW (unbounded)",
+  "npl_prox",           0,    NA,   "inverse-distance score",
+  "rmp_prox",           0,    NA,   "inverse-distance score",
+  "haz_prox",           0,    NA,   "inverse-distance score"
+)
+
+range_results <- range_spec %>%
+  rowwise() %>%
+  mutate(
+    n_valid    = sum(!is.na(df[[column]])),
+    obs_min    = if (n_valid > 0) min(df[[column]], na.rm = TRUE) else NA_real_,
+    obs_max    = if (n_valid > 0) max(df[[column]], na.rm = TRUE) else NA_real_,
+    # n_below_lo = if (!is.na(lo)) sum(df[[column]] < lo, na.rm = TRUE) else 0L,
+    # n_above_hi = if (!is.na(hi)) sum(df[[column]] > hi, na.rm = TRUE) else 0L,
+    # flag       = case_when(
+    #   n_valid == 0              ~ "⛔ no data",
+    #   n_below_lo > 0            ~ glue::glue("🔴 {n_below_lo} below {lo}"),
+    #   n_above_hi > 0            ~ glue::glue("🔴 {n_above_hi} above {hi}"),
+    #   TRUE                      ~ "✅ in range"
+    # )
+  ) %>%
+  ungroup()
+
+range_results %>%
+  select(column,
+         unit,
+         n_valid,
+         obs_min,
+         obs_max,
+         #n_below_lo,
+        # n_above_hi,
+        # flag
+        ) %>%
+  mutate(across(c(obs_min, obs_max), ~ round(., 3))) %>%
+  kbl(caption = "Range check for raw indicators") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+
+## Facility Metadata
+
+```{r metadata}
+df %>%
+  count(type_detailed, name = "n_facilities") %>%
+  arrange(desc(n_facilities)) %>%
+  mutate(pct = percent(n_facilities / sum(n_facilities), accuracy = 0.1)) %>%
+  kbl(caption = "Facilities by type") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+```{r detainment-summary}
+df %>%
+  summarise(
+    total_detainment_sum      = sum(total_detainment,      na.rm = TRUE),
+    total_male_sum            = sum(total_male_detainment,  na.rm = TRUE),
+    total_female_sum          = sum(total_female_detainment,na.rm = TRUE),
+    total_non_criminal_sum    = sum(total_non_criminal,     na.rm = TRUE),
+    pct_non_criminal          = total_non_criminal_sum / total_detainment_sum,
+    median_alos_days          = median(fy26_alos, na.rm = TRUE)
+  ) %>%
+  pivot_longer(everything(), names_to = "metric", values_to = "value") %>%
+  mutate(value = ifelse(str_detect(metric, "pct"), percent(value, 0.1), comma(value))) %>%
+  kbl(caption = "Detainment summary across all facilities") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+---
+
+# Raw Indicator Exploration
+
+---
+
+## Climate Indicators {.tabset}
+
+### Flood Risk {.tabset}
+
+#### Plot & Table
+
+```{r flood}
+p1 <- df %>%
+  filter(!is.na(flood_risk)) %>%
+  ggplot(aes(flood_risk)) +
+  geom_histogram(bins = 40, fill = "#2c7fb8", color = "white", linewidth = 0.2) +
+  geom_vline(xintercept = median(df$flood_risk, na.rm = TRUE),
+             linetype = "dashed", color = "firebrick") +
+  labs(title = "Flood Risk (% flood zone coverage)",
+       subtitle = glue::glue("n = {sum(!is.na(df$flood_risk))}"),
+       x = "% facility footprint + 1km buffer in flood zone", y = "count") +
+  theme_minimal()
+
+p2 <- df %>%
+  ggplot(aes(x = "flood_risk", y = flood_risk)) +
+  geom_boxplot(fill = "#2c7fb8", alpha = 0.5, outlier.colour = "firebrick") +
+  labs(title = "Boxplot", x = NULL, y = NULL) +
+  theme_minimal()
+
+p1 + p2 + plot_layout(widths = c(3, 1))
+```
+
+```{r flood-flags}
+flood_q90 <- quantile(df$flood_risk, 0.90, na.rm = TRUE)
+df %>%
+  filter(flood_risk >= flood_q90) %>%
+  select(name, full_address, type_detailed, flood_risk) %>%
+  arrange(desc(flood_risk)) %>%
+  mutate(across(where(is.double), ~ round(., 2))) %>%
+  kbl(caption = "Facilities above 90th Percentile — Flood Risk") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+#### Map
+
+**Facilities above 90th percentile flood risk**
+
+```{r flood-map, out.width="100%", fig.height=4}
+flood_flagged <- df_wgs %>% filter(flood_risk >= flood_q90)
+pal_flood <- colorNumeric("Blues", domain = df_wgs$flood_risk, na.color = "#aaaaaa")
+
+leaflet(flood_flagged, width = "100%", height = 400) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  setView(lng = -96, lat = 38, zoom = 4) %>%
+  addCircleMarkers(
+    lng = ~lon, lat = ~lat,
+    radius = 7,
+    fillColor = ~pal_flood(flood_risk),
+    fillOpacity = 0.85,
+    color = "#1a478a", weight = 1,
+    popup = ~glue::glue(
+      "<b>{name}</b><br><i>{type_detailed}</i><br>{full_address}<hr>",
+      "<b>Flood Risk:</b> {round(flood_risk, 1)}%<br>",
+      "<b>Final Risk Score:</b> {round(final_risk_score, 2)}"
+    ),
+    label = ~name
+  ) %>%
+  addLegend("bottomright", pal = pal_flood, values = ~flood_risk,
+            title = "Flood Risk (%)", opacity = 0.8)
+```
+
+---
+
+### Wildfire Risk {.tabset}
+
+Note that these values are reflective of the [USFS Wildfire Hazard Potential Index](https://www.fs.usda.gov/rds/archive/catalog/RDS-2016-0034-3), which are meant to be relative values, not absolute.
+
+#### Plot & Table
+
+```{r wildfire}
+p1 <- df %>%
+  ggplot(aes(wildfire_risk)) +
+  geom_histogram(bins = 40, fill = "#e34a33", color = "white", linewidth = 0.2) +
+  scale_x_log10(labels = comma) +
+  labs(title = "Wildfire Risk (log scale)",
+       x = "wildfire risk index (log)", y = "count") +
+  theme_minimal()
+
+p2 <- df %>%
+  ggplot(aes(x = "wildfire", y = wildfire_risk)) +
+  geom_boxplot(fill = "#e34a33", alpha = 0.5, outlier.colour = "firebrick") +
+  scale_y_log10(labels = comma) +
+  labs(title = "Boxplot (log)", x = NULL, y = NULL) +
+  theme_minimal()
+
+p1 + p2 + plot_layout(widths = c(3, 1))
+```
+
+```{r wildfire-outliers}
+wf_q90 <- quantile(df$wildfire_risk, 0.90, na.rm = TRUE)
+df %>%
+  filter(wildfire_risk > wf_q90) %>%
+  select(name, full_address, type_detailed, wildfire_risk) %>%
+  arrange(desc(wildfire_risk)) %>%
+  mutate(across(where(is.double), ~ round(., 2))) %>%
+  kbl(caption = glue::glue("Facilities above 90th percentile (>{round(wf_q90,1)})")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+#### Map
+
+**Facilities above 99th percentile wildfire risk**
+
+```{r wildfire-map, out.width="100%", fig.height=4}
+wf_flagged <- df_wgs %>% filter(wildfire_risk > wf_q90)
+pal_wf <- colorNumeric("Oranges", domain = log10(df_wgs$wildfire_risk + 1), na.color = "#aaaaaa")
+
+leaflet(wf_flagged, width = "100%", height = 400) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  setView(lng = -96, lat = 38, zoom = 4) %>%
+  addCircleMarkers(
+    lng = ~lon, lat = ~lat,
+    radius = 7,
+    fillColor = ~pal_wf(log10(wildfire_risk + 1)),
+    fillOpacity = 0.85,
+    color = "#b30000", weight = 1,
+    popup = ~glue::glue(
+      "<b>{name}</b><br><i>{type_detailed}</i><br>{full_address}<hr>",
+      "<b>Wildfire Risk Index:</b> {round(wildfire_risk, 1)}<br>",
+      "<b>Final Risk Score:</b> {round(final_risk_score, 2)}"
+    ),
+    label = ~name
+  ) %>%
+  addLegend("bottomright", pal = pal_wf, values = ~log10(wildfire_risk + 1),
+            title = "Wildfire Risk (log₁₀)", opacity = 0.8)
+```
+
+---
+
+### Land Surface Temperature {.tabset}
+
+#### Plot & Table
+
+```{r lst}
+p1 <- df %>%
+  ggplot(aes(lst_avg)) +
+  geom_histogram(bins = 40, fill = "#fd8d3c", color = "white", linewidth = 0.2) +
+  geom_vline(xintercept = median(df$lst_avg, na.rm = TRUE),
+             linetype = "dashed", color = "firebrick") +
+  labs(title = "Mean LST (summer Landsat, °C)",
+       x = "LST °C", y = "count") +
+  theme_minimal()
+
+p1
+```
+
+```{r lst-flags}
+lst_q90 <- quantile(df$lst_avg, 0.90, na.rm = TRUE)
+df %>%
+  filter(lst_avg > lst_q90) %>%
+  select(name, full_address, type_detailed, lst_avg) %>%
+  arrange(desc(lst_avg)) %>%
+  mutate(across(where(is.double), ~ round(., 2))) %>%
+  kbl(caption = glue::glue("Facilities above 90th percentile LST (>{round(lst_q90,1)} °C)")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+#### Map
+
+**Facilities above 95th percentile land surface temperature**
+
+```{r lst-map, out.width="100%", fig.height=4}
+lst_flagged <- df_wgs %>% filter(lst_avg > lst_q90)
+pal_lst <- colorNumeric("YlOrRd", domain = df_wgs$lst_avg, na.color = "#aaaaaa")
+
+leaflet(lst_flagged, width = "100%", height = 400) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  setView(lng = -96, lat = 38, zoom = 4) %>%
+  addCircleMarkers(
+    lng = ~lon, lat = ~lat,
+    radius = 7,
+    fillColor = ~pal_lst(lst_avg),
+    fillOpacity = 0.85,
+    color = "#7f0000", weight = 1,
+    popup = ~glue::glue(
+      "<b>{name}</b><br><i>{type_detailed}</i><br>{full_address}<hr>",
+      "<b>Mean LST:</b> {round(lst_avg, 1)} °C<br>",
+      "<b>Final Risk Score:</b> {round(final_risk_score, 2)}"
+    ),
+    label = ~name
+  ) %>%
+  addLegend("bottomright", pal = pal_lst, values = ~lst_avg,
+            title = "Mean LST (°C)", opacity = 0.8)
+```
+
+---
+
+### Tree Canopy Cover {.tabset}
+
+#### Plot & Table
+
+```{r tree}
+p1 <- df %>%
+  ggplot(aes(percent_tree_cover)) +
+  geom_histogram(bins = 40, fill = "#41ab5d", color = "white", linewidth = 0.2) +
+  labs(title = "Tree Canopy Cover (%)",
+       x = "% canopy (1km buffer, NLCD 2023)", y = "count") +
+  theme_minimal()
+
+p1
+```
+
+```{r tree-flags}
+df %>%
+  filter(percent_tree_cover == 0) %>%
+  select(name, full_address, type_detailed, percent_tree_cover) %>%
+  mutate(across(where(is.double), ~ round(., 2))) %>%
+  kbl(caption = "Facilities with 0% canopy") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+#### Map
+
+**Facilities with 0% Canopy Cover**
+
+```{r tree-map, out.width="100%", fig.height=4}
+# tree_q25 <- quantile(df_wgs$percent_tree_cover, 0.25, na.rm = TRUE)
+# tree_flagged <- df_wgs %>% filter(percent_tree_cover <= tree_q25)
+# pal_tree <- colorNumeric("Greens", domain = df_wgs$percent_tree_cover, na.color = "#aaaaaa")
+
+leaflet(df_wgs %>%
+  filter(percent_tree_cover == 0), width = "100%", height = 400) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  setView(lng = -96, lat = 38, zoom = 4) %>%
+  addCircleMarkers(
+    lng = ~lon, lat = ~lat,
+    radius = 7,
+    fillColor = "#006d2c",
+    fillOpacity = 0.85,
+    color = "#006d2c", weight = 1,
+    popup = ~glue::glue(
+      "<b>{name}</b><br><i>{type_detailed}</i><br>{full_address}<hr>",
+      "<b>Tree Canopy:</b> {round(percent_tree_cover, 1)}%<br>",
+      "<b>Final Risk Score:</b> {round(final_risk_score, 2)}"
+    ),
+    label = ~name
+  )
+```
+
+---
+
+## Exposure Indicators {.tabset}
+
+### Ozone {.tabset}
+
+#### Plot & Table
+
+```{r ozone}
+p1 <- df %>%
+  ggplot(aes(mean_ozone)) +
+  geom_histogram(bins = 40, fill = "#6a51a3", color = "white", linewidth = 0.2) +
+  geom_vline(xintercept = 70, linetype = "dashed", color = "firebrick",
+             linewidth = 0.8) +
+  annotate("text", x = 71, y = Inf, label = "NAAQS 70 ppb",
+           hjust = 0, vjust = 2, size = 3, color = "firebrick") +
+  labs(title = "Mean 8-hr Max Ozone (ppb) — EPA FAQSD",
+       x = "ozone (ppb)", y = "count") +
+  theme_minimal()
+
+p1
+```
+
+```{r ozone-flags}
+n_exceed <- sum(df$mean_ozone >= 70, na.rm = TRUE)
+cat(glue::glue("{n_exceed} facilities at or above NAAQS 70 ppb threshold\n\n"))
+
+df %>%
+  filter(mean_ozone >= 70) %>%
+  select(name, full_address, type_detailed, mean_ozone) %>%
+  arrange(desc(mean_ozone)) %>%
+  mutate(across(where(is.double), ~ round(., 2))) %>%
+  kbl(caption = "Facilities at or above NAAQS 70 ppb") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+#### Map
+
+**Facilities at or above NAAQS ozone standard (70 ppb)**
+
+```{r ozone-map, out.width="100%", fig.height=4}
+ozone_flagged <- df_wgs %>% filter(mean_ozone >= 70)
+pal_ozone <- colorNumeric("Purples", domain = df_wgs$mean_ozone, na.color = "#aaaaaa")
+
+leaflet(ozone_flagged, width = "100%", height = 400) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  setView(lng = -96, lat = 38, zoom = 4) %>%
+  addCircleMarkers(
+    lng = ~lon, lat = ~lat,
+    radius = 7,
+    fillColor = ~pal_ozone(mean_ozone),
+    fillOpacity = 0.85,
+    color = "#3f007d", weight = 1,
+    popup = ~glue::glue(
+      "<b>{name}</b><br><i>{type_detailed}</i><br>{full_address}<hr>",
+      "<b>Mean Ozone:</b> {round(mean_ozone, 1)} ppb<br>",
+      "<b>NAAQS Standard:</b> 70 ppb<br>",
+      "<b>Final Risk Score:</b> {round(final_risk_score, 2)}"
+    ),
+    label = ~name
+  ) %>%
+  addLegend("bottomright", pal = pal_ozone, values = ~mean_ozone,
+            title = "Mean Ozone (ppb)", opacity = 0.8)
+```
+
+---
+
+### PM2.5 {.tabset}
+
+#### Plot & Table
+
+```{r pm25}
+p1 <- df %>%
+  ggplot(aes(avg_pm25)) +
+  geom_histogram(bins = 40, fill = "#9ecae1", color = "white", linewidth = 0.2) +
+  geom_vline(xintercept = 12, linetype = "dashed", color = "firebrick") +
+  annotate("text", x = 12.5, y = Inf, label = "NAAQS 12 µg/m³",
+           hjust = 0, vjust = 2, size = 3, color = "firebrick") +
+  labs(title = "Mean PM2.5 (µg/m³)", x = "PM2.5 µg/m³", y = "count") +
+  theme_minimal()
+
+p1
+```
+
+```{r pm25-flags}
+n_pm_exceed <- sum(df$avg_pm25 >= 12, na.rm = TRUE)
+cat(glue::glue("{n_pm_exceed} facilities at or above annual NAAQS of 12 µg/m³\n\n"))
+
+df %>%
+  filter(avg_pm25 >= 12) %>%
+  select(name, full_address, type_detailed, avg_pm25) %>%
+  arrange(desc(avg_pm25)) %>%
+  mutate(across(where(is.double), ~ round(., 2))) %>%
+  kbl(caption = "Facilities at or above NAAQS 12 µg/m³") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+#### Map
+
+**Facilities at or above NAAQS annual PM2.5 standard (12 µg/m³)**
+
+```{r pm25-map, out.width="100%", fig.height=4}
+pm_flagged <- df_wgs %>% filter(avg_pm25 >= 12)
+pal_pm <- colorNumeric("Blues", domain = df_wgs$avg_pm25, na.color = "#aaaaaa")
+
+leaflet(pm_flagged, width = "100%", height = 400) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  setView(lng = -96, lat = 38, zoom = 4) %>%
+  addCircleMarkers(
+    lng = ~lon, lat = ~lat,
+    radius = 7,
+    fillColor = ~pal_pm(avg_pm25),
+    fillOpacity = 0.85,
+    color = "#08306b", weight = 1,
+    popup = ~glue::glue(
+      "<b>{name}</b><br><i>{type_detailed}</i><br>{full_address}<hr>",
+      "<b>Mean PM2.5:</b> {round(avg_pm25, 2)} µg/m³<br>",
+      "<b>NAAQS Standard:</b> 12 µg/m³<br>",
+      "<b>Final Risk Score:</b> {round(final_risk_score, 2)}"
+    ),
+    label = ~name
+  ) %>%
+  addLegend("bottomright", pal = pal_pm, values = ~avg_pm25,
+            title = "PM2.5 (µg/m³)", opacity = 0.8)
+```
+
+---
+
+### Pesticide Load {.tabset}
+
+#### Plot & Table
+
+```{r pesticide}
+p1 <- df %>%
+  filter(!is.na(pesticide_mean_kg)) %>%
+  ggplot(aes(pesticide_mean_kg)) +
+  geom_histogram(bins = 40, fill = "#a1d99b", color = "white", linewidth = 0.2) +
+  scale_x_log10(labels = comma) +
+  labs(title = "Mean Pesticide Load (kg, PEST-CHEMGRIDSv2, log scale)",
+       subtitle = glue::glue("n = {sum(!is.na(df$pesticide_mean_kg))} | ",
+                             "{sum(df$pesticide_mean_kg == 0, na.rm=TRUE)} zeros"),
+       x = "pesticide mean kg (log₁₀)", y = "count") +
+  theme_minimal()
+
+p2 <- df %>%
+  filter(!is.na(pesticide_mean_kg)) %>%
+  ggplot(aes("pesticide", pesticide_mean_kg)) +
+  geom_boxplot(fill = "#a1d99b", alpha = 0.5, outlier.colour = "firebrick") +
+  scale_y_log10(labels = comma) +
+  labs(title = "Boxplot (log)", x = NULL, y = NULL) +
+  theme_minimal()
+
+p1 + p2 + plot_layout(widths = c(3, 1))
+```
+
+```{r pesticide-flags}
+pest_q90 <- quantile(df$pesticide_mean_kg, 0.90, na.rm = TRUE)
+df %>%
+  filter(pesticide_mean_kg >= pest_q90) %>%
+  select(name, full_address, type_detailed, pesticide_mean_kg) %>%
+  arrange(desc(pesticide_mean_kg)) %>%
+  mutate(across(where(is.double), ~ round(., 1))) %>%
+  kbl(caption = glue::glue("Facilities above 90th percentile pesticide load (>{round(pest_q90,1)} kg)")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+#### Map
+
+**Facilities above 95th percentile pesticide load**
+
+```{r pesticide-map, out.width="100%", fig.height=4}
+pest_flagged <- df_wgs %>% filter(pesticide_mean_kg >= pest_q90)
+pal_pest <- colorNumeric("Greens", domain = log10(df_wgs$pesticide_mean_kg + 1), na.color = "#aaaaaa")
+
+leaflet(pest_flagged, width = "100%", height = 400) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  setView(lng = -96, lat = 38, zoom = 4) %>%
+  addCircleMarkers(
+    lng = ~lon, lat = ~lat,
+    radius = 7,
+    fillColor = ~pal_pest(log10(pesticide_mean_kg + 1)),
+    fillOpacity = 0.85,
+    color = "#00441b", weight = 1,
+    popup = ~glue::glue(
+      "<b>{name}</b><br><i>{type_detailed}</i><br>{full_address}<hr>",
+      "<b>Pesticide Load:</b> {round(pesticide_mean_kg, 1)} kg<br>",
+      "<b>Final Risk Score:</b> {round(final_risk_score, 2)}"
+    ),
+    label = ~name
+  ) %>%
+  addLegend("bottomright", pal = pal_pest, values = ~log10(pesticide_mean_kg + 1),
+            title = "Pesticide (log₁₀ kg)", opacity = 0.8)
+```
+
+---
+
+### Traffic Proximity {.tabset}
+
+#### Plot & Table
+
+```{r traffic}
+p1 <- df %>%
+  ggplot(aes(trafficProx)) +
+  geom_histogram(bins = 40, fill = "#636363", color = "white", linewidth = 0.2) +
+  scale_x_log10(labels = comma) +
+  labs(title = "Traffic Proximity Score (IDW, 500m buffer, log scale)",
+       x = "traffic proximity (log₁₀)", y = "count") +
+  theme_minimal()
+
+p2 <- df %>%
+  ggplot(aes("traffic", trafficProx)) +
+  geom_boxplot(fill = "#636363", alpha = 0.5, outlier.colour = "firebrick") +
+  scale_y_log10(labels = comma) +
+  labs(title = "Boxplot (log)", x = NULL, y = NULL) +
+  theme_minimal()
+
+p1 + p2 + plot_layout(widths = c(3, 1))
+```
+
+```{r traffic-flags}
+traffic_q90 <- quantile(df$trafficProx, 0.90, na.rm = TRUE)
+df %>%
+  filter(trafficProx >= traffic_q90) %>%
+  select(name, full_address, type_detailed, trafficProx) %>%
+  arrange(desc(trafficProx)) %>%
+  mutate(across(where(is.double), ~ round(., 2))) %>%
+  kbl(caption = glue::glue("Facilities above 90th percentile — Traffic Proximity")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+#### Map
+
+**Facilities above 90th percentile traffic proximity score**
+
+```{r traffic-map, out.width="100%", fig.height=4}
+traffic_flagged <- df_wgs %>% filter(trafficProx >= traffic_q90)
+pal_traffic <- colorNumeric("Greys", domain = log10(df_wgs$trafficProx + 1), na.color = "#aaaaaa")
+
+leaflet(traffic_flagged, width = "100%", height = 400) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  setView(lng = -96, lat = 38, zoom = 4) %>%
+  addCircleMarkers(
+    lng = ~lon, lat = ~lat,
+    radius = 7,
+    fillColor = ~pal_traffic(log10(trafficProx + 1)),
+    fillOpacity = 0.85,
+    color = "#252525", weight = 1,
+    popup = ~glue::glue(
+      "<b>{name}</b><br><i>{type_detailed}</i><br>{full_address}<hr>",
+      "<b>Traffic Proximity Score:</b> {round(trafficProx, 1)}<br>",
+      "<b>Final Risk Score:</b> {round(final_risk_score, 2)}"
+    ),
+    label = ~name
+  ) %>%
+  addLegend("bottomright", pal = pal_traffic, values = ~log10(trafficProx + 1),
+            title = "Traffic Proximity (log₁₀)", opacity = 0.8)
+```
+
+---
+
+## Effects Indicators {.tabset}
+
+### NPL Proximity {.tabset}
+
+#### Plot & Table
+
+```{r npl}
+p1 <- df %>%
+  ggplot(aes(npl_prox)) +
+  geom_histogram(bins = 40, fill = "#2ca25f", color = "white", linewidth = 0.2) +
+  scale_x_log10(labels = comma) +
+  labs(title = "NPL (Superfund) Site Proximity Score (log scale)",
+       x = "NPL proximity score (log₁₀)", y = "count") +
+  theme_minimal()
+
+p2 <- df %>%
+  ggplot(aes("npl", npl_prox)) +
+  geom_boxplot(fill = "#2ca25f", alpha = 0.5, outlier.colour = "firebrick") +
+  scale_y_log10(labels = comma) +
+  labs(title = "Boxplot (log)", x = NULL, y = NULL) +
+  theme_minimal()
+
+p1 + p2 + plot_layout(widths = c(3, 1))
+```
+
+```{r npl-flags}
+npl_q90 <- quantile(df$npl_prox, 0.90, na.rm = TRUE)
+df %>%
+  filter(npl_prox >= npl_q90) %>%
+  select(name, full_address, type_detailed, npl_prox) %>%
+  arrange(desc(npl_prox)) %>%
+  mutate(across(where(is.double), ~ round(., 3))) %>%
+  kbl(caption = "Facilities above 90th percentile — NPL Proximity") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+#### Map
+
+**Facilities above 90th percentile NPL (Superfund) site proximity**
+
+Outlier nearly overlaps with NPL site (but address for NPL site is not exact. Site is EPA ID WVD024185373)
+
+```{r npl-map, out.width="100%", fig.height=4}
+npl_flagged <- df_wgs %>% filter(npl_prox >= npl_q90)
+pal_npl <- colorNumeric("YlGn", domain = log10(df_wgs$npl_prox + 1), na.color = "#aaaaaa")
+
+leaflet(npl_flagged, width = "100%", height = 400) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  setView(lng = -96, lat = 38, zoom = 4) %>%
+  addCircleMarkers(
+    lng = ~lon, lat = ~lat,
+    radius = 7,
+    fillColor = ~pal_npl(log10(npl_prox + 1)),
+    fillOpacity = 0.85,
+    color = "#006d2c", weight = 1,
+    popup = ~glue::glue(
+      "<b>{name}</b><br><i>{type_detailed}</i><br>{full_address}<hr>",
+      "<b>NPL Proximity Score:</b> {round(npl_prox, 3)}<br>",
+      "<b>Final Risk Score:</b> {round(final_risk_score, 2)}"
+    ),
+    label = ~name
+  ) %>%
+  addLegend("bottomright", pal = pal_npl, values = ~log10(npl_prox + 1),
+            title = "NPL Proximity (log₁₀)", opacity = 0.8)
+```
+
+
+---
+
+### RMP Proximity {.tabset}
+
+#### Plot & Table
+
+```{r rmp}
+p1 <- df %>%
+  ggplot(aes(rmp_prox)) +
+  geom_histogram(bins = 40, fill = "#f768a1", color = "white", linewidth = 0.2) +
+  scale_x_log10(labels = comma) +
+  labs(title = "RMP Site Proximity Score (log scale)",
+       x = "RMP proximity score (log₁₀)", y = "count") +
+  theme_minimal()
+
+p2 <- df %>%
+  ggplot(aes("rmp", rmp_prox)) +
+  geom_boxplot(fill = "#f768a1", alpha = 0.5, outlier.colour = "firebrick") +
+  scale_y_log10(labels = comma) +
+  labs(title = "Boxplot (log)", x = NULL, y = NULL) +
+  theme_minimal()
+
+p1 + p2 + plot_layout(widths = c(3, 1))
+```
+
+```{r rmp-flags}
+rmp_q90 <- quantile(df$rmp_prox, 0.90, na.rm = TRUE)
+df %>%
+  filter(rmp_prox >= rmp_q90) %>%
+  select(name, full_address, type_detailed, rmp_prox) %>%
+  arrange(desc(rmp_prox)) %>%
+  mutate(across(where(is.double), ~ round(., 3))) %>%
+  kbl(caption = "Facilities above 90th percentile — RMP Proximity") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+#### Map
+
+**Facilities above 90th percentile RMP site proximity**
+
+```{r rmp-map, out.width="100%", fig.height=4}
+rmp_flagged <- df_wgs %>% filter(rmp_prox >= rmp_q90)
+pal_rmp <- colorNumeric("RdPu", domain = log10(df_wgs$rmp_prox + 1), na.color = "#aaaaaa")
+
+leaflet(rmp_flagged, width = "100%", height = 400) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  setView(lng = -96, lat = 38, zoom = 4) %>%
+  addCircleMarkers(
+    lng = ~lon, lat = ~lat,
+    radius = 7,
+    fillColor = ~pal_rmp(log10(rmp_prox + 1)),
+    fillOpacity = 0.85,
+    color = "#7a0177", weight = 1,
+    popup = ~glue::glue(
+      "<b>{name}</b><br><i>{type_detailed}</i><br>{full_address}<hr>",
+      "<b>RMP Proximity Score:</b> {round(rmp_prox, 3)}<br>",
+      "<b>Final Risk Score:</b> {round(final_risk_score, 2)}"
+    ),
+    label = ~name
+  ) %>%
+  addLegend("bottomright", pal = pal_rmp, values = ~log10(rmp_prox + 1),
+            title = "RMP Proximity (log₁₀)", opacity = 0.8)
+```
+
+---
+
+### Hazardous Waste Proximity {.tabset}
+
+#### Plot & Table
+
+```{r haz}
+p1 <- df %>%
+  ggplot(aes(haz_prox)) +
+  geom_histogram(bins = 40, fill = "#ae017e", color = "white", linewidth = 0.2) +
+  scale_x_log10(labels = comma) +
+  labs(title = "Hazardous Waste Site Proximity Score (log scale)",
+       x = "haz proximity score (log₁₀)", y = "count") +
+  theme_minimal()
+
+p2 <- df %>%
+  ggplot(aes("haz", haz_prox)) +
+  geom_boxplot(fill = "#ae017e", alpha = 0.5, outlier.colour = "firebrick") +
+  scale_y_log10(labels = comma) +
+  labs(title = "Boxplot (log)", x = NULL, y = NULL) +
+  theme_minimal()
+
+p1 + p2 + plot_layout(widths = c(3, 1))
+```
+
+```{r haz-flags}
+haz_q90 <- quantile(df$haz_prox, 0.90, na.rm = TRUE)
+df %>%
+  filter(haz_prox >= haz_q90) %>%
+  select(name, full_address, type_detailed, haz_prox) %>%
+  arrange(desc(haz_prox)) %>%
+  mutate(across(where(is.double), ~ round(., 3))) %>%
+  kbl(caption = "Facilities above 90th percentile — Hazardous Waste Proximity") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"))
+```
+
+#### Map
+
+**Facilities above 90th percentile hazardous waste site proximity**
+
+```{r haz-map, out.width="100%", fig.height=4}
+haz_flagged <- df_wgs %>% filter(haz_prox >= haz_q90)
+pal_haz <- colorNumeric("Reds", domain = log10(df_wgs$haz_prox + 1), na.color = "#aaaaaa")
+
+leaflet(haz_flagged, width = "100%", height = 400) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  setView(lng = -96, lat = 38, zoom = 4) %>%
+  addCircleMarkers(
+    lng = ~lon, lat = ~lat,
+    radius = 7,
+    fillColor = ~pal_haz(log10(haz_prox + 1)),
+    fillOpacity = 0.85,
+    color = "#67000d", weight = 1,
+    popup = ~glue::glue(
+      "<b>{name}</b><br><i>{type_detailed}</i><br>{full_address}<hr>",
+      "<b>Hazardous Waste Proximity Score:</b> {round(haz_prox, 3)}<br>",
+      "<b>Final Risk Score:</b> {round(final_risk_score, 2)}"
+    ),
+    label = ~name
+  ) %>%
+  addLegend("bottomright", pal = pal_haz, values = ~log10(haz_prox + 1),
+            title = "Haz Waste Proximity (log₁₀)", opacity = 0.8)
+```
+
+---
+
+# Component & Index-Level Summaries {.tabset}
+
+
+## Score Correlations
+
+```{r score-corr}
+component_scores <- c("climate_score", "exposure_score", "effects_score")
+
+cor_mat <- df %>%
+  select(all_of(component_scores), final_risk_score) %>%
+  cor(use = "pairwise.complete.obs", method = "spearman")
+
+cor_long <- as.data.frame(as.table(cor_mat)) %>%
+  filter(as.character(Var1) < as.character(Var2)) %>%
+  rename(score_a = Var1, score_b = Var2, spearman_r = Freq)
+
+cor_long %>%
+  mutate(spearman_r = round(spearman_r, 3)) %>%
+  kbl(caption = "Spearman rank correlations between component scores and final index") %>%
+  kable_styling(bootstrap_options = c("striped", "hover"), full_width = FALSE)
+```
+
+
+## Scores by Facility Type
+
+```{r scores-by-type}
+df %>%
+  select(type_detailed, all_of(component_scores), final_risk_score) %>%
+  pivot_longer(-type_detailed, names_to = "score", values_to = "value") %>%
+  mutate(score = factor(score,
+                        levels = c("climate_score", "exposure_score",
+                                   "effects_score", "final_risk_score"))) %>%
+  ggplot(aes(x = reorder(type_detailed, value, median, na.rm = TRUE),
+             y = value, fill = type_detailed)) +
+  geom_boxplot(alpha = 0.7, outlier.size = 1) +
+  coord_flip() +
+  facet_wrap(~ score, ncol = 2, scales = "free_x") +
+  labs(title = "Component and Final Scores by Facility Type",
+       x = NULL, y = "score") +
+  theme_minimal() +
+  theme(legend.position = "none")
+```
+
+## Top/Bottom Facilities (Final Index)
+
+```{r top-facilities}
+top_n_show <- 20
+
+df %>%
+  arrange(desc(final_risk_score_pcntl)) %>%
+  slice_head(n = top_n_show) %>%
+  select(name, type_detailed, full_address,
+         climate_score, exposure_score, effects_score,
+         final_risk_score, final_risk_score_pcntl) %>%
+  mutate(across(where(is.double), ~ round(., 2))) %>%
+  kbl(caption = glue::glue("Top {top_n_show} highest-risk facilities (final index percentile)")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                font_size = 12, full_width = FALSE) %>%
+  row_spec(1:5, background = "#fff3cd")
+```
+
+```{r bottom-facilities}
+df %>%
+  arrange(final_risk_score_pcntl) %>%
+  slice_head(n = top_n_show) %>%
+  select(name, type_detailed, full_address,
+         climate_score, exposure_score, effects_score,
+         final_risk_score, final_risk_score_pcntl) %>%
+  mutate(across(where(is.double), ~ round(., 2))) %>%
+  kbl(caption = glue::glue("Bottom {top_n_show} lowest-risk facilities")) %>%
+  kable_styling(bootstrap_options = c("striped", "hover", "condensed"),
+                font_size = 12, full_width = FALSE)
+```
+
+
+## Indicator Heatmap (Top 40 Facilities)
+
+```{r heatmap, fig.height=11, fig.width=10}
+pcntl_raw <- df %>%
+  select(name, ends_with("_pcntl"), -final_risk_score_pcntl) %>%
+  arrange(desc(df$final_risk_score_pcntl)) %>%
+  slice_head(n = 40) %>%
+  pivot_longer(-name, names_to = "indicator", values_to = "percentile") %>%
+  mutate(
+    indicator = str_remove(indicator, "_pcntl"),
+    indicator = str_replace_all(indicator, "_", " ")
+  )
+
+ggplot(pcntl_raw, aes(x = indicator, y = reorder(name, percentile, mean, na.rm = TRUE),
+                       fill = percentile)) +
+  geom_tile(color = "white", linewidth = 0.3) +
+  scale_fill_gradient2(low = "#2166ac", mid = "#f7f7f7", high = "#d6604d",
+                       midpoint = 50, limits = c(0, 100),
+                       name = "Percentile") +
+  labs(title = "Indicator Percentile Heatmap — Top 40 Highest-Risk Facilities",
+       subtitle = "Sorted by mean percentile across indicators; red = high exposure",
+       x = NULL, y = NULL) +
+  theme_minimal() +
+  theme(
+    axis.text.x  = element_text(angle = 40, hjust = 1, size = 9),
+    axis.text.y  = element_text(size = 7),
+    panel.grid   = element_blank()
+  )
+```
+
+---
+
+# Spatial Patterns {.tabset}
+
+## Final Risk Index — All Facilities
+
+All `r nrow(df_wgs)` facilities mapped and coloured by final risk score. Use the search
+box to find a specific facility; click any marker for full details.
+
+```{r map-final-risk, out.width="100%", fig.height=4}
+leaflet(df_wgs, width = "100%", height = 450) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  setView(lng = -96, lat = 38, zoom = 4) %>%
+  addCircleMarkers(
+    lng = ~lon, lat = ~lat,
+    radius = ~scales::rescale(final_risk_score, to = c(4, 12)),
+    fillColor = ~pal_risk(final_risk_score_pcntl),
+    fillOpacity = 0.85,
+    color = "#444444", weight = 0.5,
+    popup = ~glue::glue(
+      "<b>{name}</b><br><i>{type_detailed}</i><br>{full_address}<hr>",
+      "<b>Final Risk Percentile:</b> {round(final_risk_score_pcntl, 1)}<br>",
+      "<b>Climate Score:</b> {round(climate_score, 2)}<br>",
+      "<b>Exposure Score:</b> {round(exposure_score, 2)}<br>",
+      "<b>Effects Score:</b> {round(effects_score, 2)}<br>",
+      "<b>Final Risk Score:</b> {round(final_risk_score, 2)}<br>",
+      "<b>Total Detainees:</b> {scales::comma(total_detainment)}"
+    ),
+    label = ~name
+  ) %>%
+  addLegend("bottomright", pal = pal_risk,
+            values = ~final_risk_score_pcntl,
+            title = "Final Risk Percentile", opacity = 0.85)
+```
+
+---
+
+## Top 25 Highest-Risk Facilities
+
+```{r map-top25, out.width="100%", fig.height=4}
+top25 <- df_wgs %>%
+  arrange(desc(final_risk_score_pcntl)) %>%
+  slice_head(n = 25) %>%
+  mutate(rank = row_number())
+
+pal_top25 <- colorNumeric("YlOrRd", domain = top25$final_risk_score_pcntl)
+
+leaflet(top25, width = "100%", height = 450) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  setView(lng = -96, lat = 38, zoom = 4) %>%
+  addCircleMarkers(
+    lng = ~lon, lat = ~lat,
+    radius = 9,
+    fillColor = ~pal_top25(final_risk_score_pcntl),
+    fillOpacity = 0.9,
+    color = "#222222", weight = 1,
+    popup = ~glue::glue(
+      "<b>Rank #{rank}: {name}</b><br><i>{type_detailed}</i><br>{full_address}<hr>",
+      "<b>Final Risk Percentile:</b> {round(final_risk_score_pcntl, 1)}<br>",
+      "<b>Climate Score:</b> {round(climate_score, 2)}<br>",
+      "<b>Exposure Score:</b> {round(exposure_score, 2)}<br>",
+      "<b>Effects Score:</b> {round(effects_score, 2)}<br>",
+      "<b>Total Detainees:</b> {scales::comma(total_detainment)}<br>",
+      "<b>% Non-Criminal:</b> {round(total_non_criminal / total_detainment * 100, 1)}%"
+    ),
+    label = ~glue::glue("#{rank} {name}"),
+    labelOptions = labelOptions(permanent = FALSE)
+  ) %>%
+  addLegend("bottomright", pal = pal_top25,
+            values = ~final_risk_score_pcntl,
+            title = "Final Risk Percentile", opacity = 0.85)
+```
+
+---
+
+## Component Score Maps {.tabset}
+
+### Climate
+
+```{r map-climate, out.width="100%", fig.height=4}
+pal_climate <- colorNumeric("YlOrRd", domain = df_wgs$climate_score, na.color = "#aaaaaa")
+
+leaflet(df_wgs, width = "100%", height = 450) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  setView(lng = -96, lat = 38, zoom = 4) %>%
+  addCircleMarkers(
+    lng = ~lon, lat = ~lat,
+    radius = 6,
+    fillColor = ~pal_climate(climate_score),
+    fillOpacity = 0.8,
+    color = "#555555", weight = 0.5,
+    popup = ~glue::glue(
+      "<b>{name}</b><br><i>{type_detailed}</i><br>{full_address}<hr>",
+      "<b>Climate Score:</b> {round(climate_score, 2)}<br>",
+      "<b>Flood Risk:</b> {round(flood_risk, 1)}%<br>",
+      "<b>Wildfire Risk:</b> {round(wildfire_risk, 1)}<br>",
+      "<b>LST:</b> {round(lst_avg, 1)} °C<br>",
+      "<b>Tree Canopy:</b> {round(percent_tree_cover, 1)}%"
+    ),
+    label = ~name
+  ) %>%
+  addLegend("bottomright", pal = pal_climate,
+            values = ~climate_score,
+            title = "Climate Score", opacity = 0.85)
+```
+
+### Exposure
+
+```{r map-exposure, out.width="100%", fig.height=4}
+pal_exposure <- colorNumeric("YlOrRd", domain = df_wgs$exposure_score, na.color = "#aaaaaa")
+
+leaflet(df_wgs, width = "100%", height = 450) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  setView(lng = -96, lat = 38, zoom = 4) %>%
+  addCircleMarkers(
+    lng = ~lon, lat = ~lat,
+    radius = 6,
+    fillColor = ~pal_exposure(exposure_score),
+    fillOpacity = 0.8,
+    color = "#555555", weight = 0.5,
+    popup = ~glue::glue(
+      "<b>{name}</b><br><i>{type_detailed}</i><br>{full_address}<hr>",
+      "<b>Exposure Score:</b> {round(exposure_score, 2)}<br>",
+      "<b>Ozone:</b> {round(mean_ozone, 1)} ppb<br>",
+      "<b>PM2.5:</b> {round(avg_pm25, 2)} µg/m³<br>",
+      "<b>Pesticide Load:</b> {round(pesticide_mean_kg, 1)} kg<br>",
+      "<b>Traffic Proximity:</b> {round(trafficProx, 1)}"
+    ),
+    label = ~name
+  ) %>%
+  addLegend("bottomright", pal = pal_exposure,
+            values = ~exposure_score,
+            title = "Exposure Score", opacity = 0.85)
+```
+
+### Effects
+
+```{r map-effects, out.width="100%", fig.height=4}
+pal_effects <- colorNumeric("YlOrRd", domain = df_wgs$effects_score, na.color = "#aaaaaa")
+
+leaflet(df_wgs, width = "100%", height = 450) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  setView(lng = -96, lat = 38, zoom = 4) %>%
+  addCircleMarkers(
+    lng = ~lon, lat = ~lat,
+    radius = 6,
+    fillColor = ~pal_effects(effects_score),
+    fillOpacity = 0.8,
+    color = "#555555", weight = 0.5,
+    popup = ~glue::glue(
+      "<b>{name}</b><br><i>{type_detailed}</i><br>{full_address}<hr>",
+      "<b>Effects Score:</b> {round(effects_score, 2)}<br>",
+      "<b>NPL Proximity:</b> {round(npl_prox, 3)}<br>",
+      "<b>RMP Proximity:</b> {round(rmp_prox, 3)}<br>",
+      "<b>Haz Waste Proximity:</b> {round(haz_prox, 3)}"
+    ),
+    label = ~name
+  ) %>%
+  addLegend("bottomright", pal = pal_effects,
+            values = ~effects_score,
+            title = "Effects Score", opacity = 0.85)
+```
+
+---
+
+## High-Detainment + High-Risk
+
+Facilities in the top quartile of both final risk score and total detainment population —
+the highest-priority group for follow-up.
+
+```{r map-highrisk-highpop, out.width="100%", fig.height=4}
+risk_q75   <- quantile(df_wgs$final_risk_score, 0.75, na.rm = TRUE)
+detain_q75 <- quantile(df_wgs$total_detainment, 0.75, na.rm = TRUE)
+
+priority <- df_wgs %>%
+  filter(final_risk_score >= risk_q75, total_detainment >= detain_q75)
+
+pal_priority <- colorNumeric("YlOrRd", domain = priority$total_detainment)
+
+leaflet(priority, width = "100%", height = 450) %>%
+  addProviderTiles(providers$CartoDB.Positron) %>%
+  setView(lng = -96, lat = 38, zoom = 4) %>%
+  addCircleMarkers(
+    lng = ~lon, lat = ~lat,
+    radius = ~scales::rescale(total_detainment, to = c(6, 14)),
+    fillColor = ~pal_priority(total_detainment),
+    fillOpacity = 0.85,
+    color = "#222222", weight = 1,
+    popup = ~glue::glue(
+      "<b>{name}</b><br><i>{type_detailed}</i><br>{full_address}<hr>",
+      "<b>Total Detainees:</b> {scales::comma(total_detainment)}<br>",
+      "<b>% Non-Criminal:</b> {round(total_non_criminal / total_detainment * 100, 1)}%<br>",
+      "<b>Final Risk Score:</b> {round(final_risk_score, 2)}<br>",
+      "<b>Climate Score:</b> {round(climate_score, 2)}<br>",
+      "<b>Exposure Score:</b> {round(exposure_score, 2)}<br>",
+      "<b>Effects Score:</b> {round(effects_score, 2)}"
+    ),
+    label = ~glue::glue("{name} ({scales::comma(total_detainment)} detainees)")
+  ) %>%
+  addLegend("bottomright", pal = pal_priority,
+            values = ~total_detainment,
+            title = "Total Detainees", opacity = 0.85) %>%
+  addControl(
+    glue::glue("<b>{nrow(priority)} facilities</b> in top quartile<br>of both risk & detainment population"),
+    position = "topright"
+  )
+```
+
+---
