@@ -1,0 +1,164 @@
+---
+title: "Code to process all indicators and create final data frame for sampled California residential areas"
+author: "Jackson Phippen"
+date: "`r Sys.Date()`"
+output: 
+  html_document: 
+    self_contained: false
+---
+
+## Process Indicators
+
+Currently (as of June 1st, 2026), there are three subsets of the same sample:
+
+1.  **All 5,000** sampled points via population weighting
+2.  Thinned sampled points to be at least **1km** from all prisons and neighboring points
+3.  Thinned sampled points to be at least **5km** from all prisons and neighboring points
+
+To avoid weird computing, I will compute indicators for all 5,000 points and correctly subset points for future analysis.
+
+There are 11 indicators in this code base. The majority of which are calculated in R, and have their own functions in the `R/` folder. Two indicators (canopy cover and heat exposure) are calculated via Google Earth Engine and have stand alone Python scripts in the 'python/' folder. 
+
+Component scores will not be calculated for these data. 
+
+First set up the environment with all required libraries via "setup.R" file, and load in data of interest. 
+
+```{r}
+# setup environment
+source("setup.R")
+
+# read in sampled points and california prisons
+ca_residences <- read_sf("data/ca_sample/all_ca_residences.gpkg")
+thin_1km <- read_sf("data/ca_sample/1km_ca_residences.gpkg")
+thin_5km <- read_sf("data/ca_sample/5km_ca_residences.gpkg")
+
+ca_prisons <- read_sf("data/phase2/processed/prisons/study_prisons.gpkg") %>% 
+  filter(STATE == "CA")
+```
+
+
+#### Flood Risk
+
+```{r}
+# flood risk (takes 1-2 days to run) (Last run time was 1.72 hours, not sure how/why)
+flood_risk <- calc_flood_risk(
+  sf_obj = ca_residences,
+  dist = 1000,
+  id_column = "object_id",
+  save = TRUE,
+  out_path = "outputs/comparison/"
+)
+```
+
+#### Wildfire Risk
+
+```{r}
+# wildfire risk
+wildfire_risk <- calc_wildfire_risk(
+  sf_obj = ca_residences,
+  file = "data/phase2/raw/wildfire_risk/Data/whp2023_GeoTIF/",
+  dist = 1000,
+  conus_only = TRUE,
+  id_column = "object_id",
+  save = TRUE,
+  out_path = "outputs/comparison/"
+)
+```
+
+#### Ozone
+
+```{r}
+# ozone
+ozone <- calc_ozone(
+  sf_obj = ca_residences, 
+  years    = c(2019, 2021, 2022),
+  folder   = "data/phase2/raw/ozone",
+  id_column = "object_id",
+  save     = TRUE,
+  out_path = "outputs/comparison/"
+)
+```
+
+#### PM 2.5
+
+```{r}
+# pm2.5 (may change dataset, check for more recent years)
+pm25 <-
+  calc_pm25(
+    sf_obj = ca_residences,
+    folder = "data/phase2/processed/PM2.5",
+    dist = 1000,
+    years = c(2021, 2023),
+    id_column = "object_id",
+    save = TRUE,
+    out_path = "outputs/comparison/"
+  )
+```
+
+#### Pesticides
+
+```{r}
+pesticides <- calc_pesticides(
+  ca_residences,
+  folder = "data/phase2/raw/pesticide/PEST-CHEMGRIDS_v2/NC/",
+  dist = 0, # resolution is 5km
+  id_column = "object_id",
+  save = TRUE,
+  out_path = "outputs/comparison/")
+```
+
+#### Traffic Proximity
+
+```{r}
+#takes 1.5 days to run
+traffic_prox <- calc_traffic_proximity(
+  sf_obj = ca_residences,
+  file = "data/phase2/processed/traffic/aadt_2023.RData",
+  dist = 500,
+  id_column = "object_id",
+  save = TRUE,
+  out_path = "outputs/comparison/"
+)
+```
+
+#### Risk Management Plan (RMP) Facility Proximity
+
+```{r}
+#calculate Risk Management Plan (RMP) facility proximity
+rmp_prox <- calc_rmp_proximity(
+  sf_obj = ca_residences,
+  file = "data/phase2/raw/RMP/EPA RMP Spreadsheets — The Data Liberation Project - Facilities.csv",
+  dist = 5000,
+  id_column = "object_id",
+  save = TRUE,
+  out_path = "outputs/comparison/"
+)
+```
+
+#### NPL/Superfund Facility Proximity
+
+```{r}
+# calculate NPL facility proximity
+npl_prox <- calc_npl_proximity(
+  sf_obj = ca_residences,
+  file = "data/phase2/processed/NPL/NPL_arc_geocode.shp",
+  dist = 5000,
+  id_column = "object_id",
+  save = TRUE,
+  out_path = "outputs/comparison/"
+)
+```
+
+#### Hazardous Waste Facility Proximity
+
+```{r}
+# calculate Haz waste facility proximity
+haz_prox <- calc_haz_waste_proximity(
+  sf_obj = ca_residences,
+  file = "data/phase2/processed/hazardous_waste/TSD_LQGs.csv",
+  dist = 5000,
+  id_column = "object_id",
+  save = TRUE,
+  out_path  = "outputs/comparison/"
+)
+```
