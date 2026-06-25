@@ -57,9 +57,9 @@ wildfire_risk <- calc_wildfire_risk(
 ozone <- calc_ozone(
   sf_obj = ice_facilities, 
   years    = c(2019, 2021, 2022),
-  data_dir = "data/phase2/raw/ozone",
+  folder = "data/phase2/raw/ozone",
   id_column = "object_id",
-  save     = TRUE,
+  save     = FALSE,
   out_path = "outputs/ice/"
 )
 ```

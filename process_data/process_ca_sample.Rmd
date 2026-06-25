@@ -1,0 +1,184 @@
+---
+title: "process_ca_sample"
+author: "Jackson Phippen"
+date: "`r Sys.Date()`"
+output: html_document
+---
+
+This workflow processes the high-population density raster from Meta filtered for the state of California and generates samples population-weighted samples and considers various thinning strategies. 
+
+Setup for workflow: 
+```{r}
+source("setup.R")
+library(FNN) #for quick nearest neighbor calculations
+library(mapview) #quick interactive plots
+
+#read in prisons and raster
+ca_prisons <- read_sf("data/phase2/processed/prisons/study_prisons.gpkg") %>% 
+  filter(STATE == "CA")
+
+ca_pop_raster <- rast("data/phase2/raw/population/ca_30m_pop_density_hrsl_2020.tif")
+```
+
+The raster has a resolution of ~30m for each cell. For processing, let's aggregate w/ factor 10, round to the nearest integer, and drop all zeros.
+```{r}
+pop_aggregate <- ca_pop_raster %>% 
+  terra::aggregate(fact = 10, 
+                   fun = sum, 
+                   na.rm = TRUE)
+
+#next, let's round to the nearest integer
+pop_aggregate <- terra::round(pop_aggregate)
+
+#now, let's drop all 0's. 
+pop_aggregate[pop_aggregate==0] <- NA
+```
+
+Next, let's sample points with respect to population. i.e. cells with larger population values will be drawn more frequently. For reproducibility, let's set our seed. 
+```{r}
+set.seed(513)
+#to speed up calculations, lets first convert values to a data frame
+pop_vals <- as.data.frame(pop_aggregate,cells=TRUE, na.rm = TRUE)
+colnames(pop_vals) <- c("cell", "pop")
+
+#add a weight/probability column
+pop_vals <- pop_vals %>% 
+  filter(pop>0) %>% #remove zeros if values weren't changed to NA's
+  mutate(prob = pop/sum(pop))
+
+#now let's attempt to sample points without replacement
+sampled_points <- sample(
+  x = pop_vals$cell,
+  size = 5000,
+  replace = FALSE, 
+  prob = pop_vals$prob
+)
+
+# keep sampled rows INCLUDING population values
+sampled_df <- pop_vals %>%
+  filter(cell %in% sampled_points)
+
+# add coordinates
+coords <- xyFromCell(pop_aggregate, sampled_df$cell)
+sampled_df <- sampled_df %>%
+  mutate(object_id = 1:5000) %>% 
+  mutate(
+    lon = coords[,1],
+    lat = coords[,2]
+  )
+
+# convert to sf object
+sampled_sf <- st_as_sf(
+  sampled_df,
+  coords = c("lon", "lat"),
+  crs = crs(pop_aggregate)
+)
+
+#store points for thinning and nearest neighbor analysis
+sampled_pts <- sampled_sf
+
+#reproject the points to meters
+sampled_pts <- st_transform(sampled_pts,crs=3310)
+ca_prisons <- ca_prisons %>% st_transform(crs=3310)
+```
+
+Next, let's thin points that are 1km and 5km apart. Our spatial thinning algorithm with exclusion constraint works as follows:
+
+This function performs a randomized greedy thinning of point data
+subject to two constraints:
+  (1) Minimum separation between retained points (threshold)
+  (2) Minimum distance from any prison location (threshold)
+
+Algorithm steps:
+  1. Ensure both datasets (pts and prisons) share a common CRS.
+  2. Extract coordinate matrices for points and prisons.
+  3. Randomly permute the order of candidate points to avoid
+     ordering bias in selection.
+  4. Initialize the kept set with the first randomly selected point.
+  5. Iteratively evaluate each remaining point:
+       a. Compute Euclidean distance to all already-kept points.
+       b. Compute Euclidean distance to all prison locations.
+       c. Retain the point only if it is at least `threshold`
+          distance from BOTH:
+             - all previously kept points
+             - all prisons
+  6. Return the subset of points that satisfy both constraints.
+
+Output:
+  A spatial subset of `pts` satisfying minimum spacing and
+  minimum distance-from-prison constraints under a greedy,
+  order-randomized selection procedure.
+
+```{r}
+
+thin_function <- function(pts, prisons, threshold, seed = 123){
+  #set a seed for reproducibility
+  set.seed(seed = seed)
+  
+  if(!st_crs(pts)==st_crs(prisons)){
+    prisons <- st_transform(prisons, crs = st_crs(pts)) #should be Albers for comparison... 
+  }
+  
+  #convert coords to a coordinate matrix
+  coords <- st_coordinates(pts)
+  prison_coords <- st_coordinates(prisons) 
+  
+  #enforce an order 
+  n <- nrow(pts)
+  order <- sample(1:n)
+  
+  #initialize
+  keep <- rep(FALSE, n)
+  keep[order[1]] <- TRUE # we always keep the first point
+  kept_coords <- coords[order[1],,drop=FALSE]
+  
+  #loop over remaining points
+  for (i in 2:n){
+    idx <- order[i]
+    candidate_pt <- coords[idx,,drop=FALSE]
+    
+    #compute euclidean distance to kept coordinates
+    d_pts <- sqrt(
+      (kept_coords[,1] - candidate_pt[1,1])^2 +
+        (kept_coords[,2] - candidate_pt[1,2])^2
+    )
+    
+    d_prisons <- sqrt(
+      (prison_coords[,1]-candidate_pt[,1])^2+
+        (prison_coords[,2]-candidate_pt[,2])^2
+    )
+    #check threshold
+    if (min(d_pts)>=threshold&& min(d_prisons)>=threshold){
+      keep[idx] <- TRUE
+      kept_coords <- rbind(kept_coords,candidate_pt)
+    }
+    
+  }
+  return(pts[keep,])
+}
+```
+
+Return thinned points for 1 km, and 5 km. 
+```{r}
+thin_1km <- thin_function(sampled_pts,ca_prisons, 1000,513)
+thin_5km <- thin_function(sampled_pts,ca_prisons, 5000,513)
+```
+
+For further analysis, let's add a buffer with radius 140.4 m to match the median square footage for Californian prisons. 
+```{r}
+#add buffers
+all_points <- st_buffer(sampled_pts, 140.4) #includes intersections with self and prisons
+thin_1km_buffers <- st_buffer(thin_1km, 140.4)
+thin_5km_buffers <- st_buffer(thin_5km, 140.4)
+```
+
+Finally, let's save these polygons. 
+```{r}
+#all points
+write_sf(all_points,"data/ca_sample/all_ca_residences.gpkg")
+#1km thin
+write_sf(thin_1km_buffers,"data/ca_sample/1km_ca_residences.gpkg")
+#5km thin
+write_sf(thin_5km_buffers,"data/ca_sample/5km_ca_residences.gpkg")
+```
+

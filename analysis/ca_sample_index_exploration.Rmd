@@ -1,0 +1,1217 @@
+---
+title: "Californian Residential Areas Exploration and QA"
+date: "`r format(Sys.Date(), '%B %d, %Y')`"
+output: 
+  html_document:
+    theme: flatly
+    toc: true
+    toc_float:
+      collapsed: false
+      smooth_scroll: true
+    toc_depth: 3
+    number_sections: true
+    code_folding: hide
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo       = TRUE,
+  warning    = FALSE,
+  message    = FALSE,
+  fig.width  = 9,
+  fig.height = 5,
+  dpi        = 150,
+  out.width  = "100%"
+)
+```
+
+```{r packages}
+library(tidyverse)
+library(sf)
+library(scales)
+library(knitr)
+library(kableExtra)
+library(patchwork)
+library(janitor)
+library(ggridges)
+library(ggdist)
+library(leaflet)
+library(leaflet.extras)
+library(glue)
+library(htmltools)
+library(pgirmess)
+```
+
+------------------------------------------------------------------------
+
+# Overview
+
+This report provides a structured quality assessment and exploratory analysis of a population-weighted drawn sample of Californian residential areas and a comparison to Californian carceral facilities. This report hopes to:
+
+1.  Assess data inventory and flags via completeness, range checks, and check for structural anomalies
+2.  Explore climate scores, environmental exposures, and environmental effects individually to view distributions and explore outliers
+3.  Evaluate if and how thinning materially changes the spatial representation of the sampled population (and determine how much thinning is necessary)
+
+```{r load-data}
+#-----Load data------------------------------------------------------------
+#read in all data
+df_all <- read_csv("outputs/comparison/final_df_all_2026-06-02.csv", show_col_types = FALSE)
+
+df_sf_all <- read_sf("outputs/comparison/final_df_all_2026-06-02.gpkg")
+
+n_all <- nrow(df_all)
+
+#read in 1km thin
+df_1km <- read_csv("outputs/comparison/final_df_1km_2026-06-02.csv", show_col_types = FALSE)
+
+df_sf_1km <- read_sf("outputs/comparison/final_df_1km_2026-06-02.gpkg")
+
+n_1km <- nrow(df_1km)
+
+#read in 5km thin
+df_5km <- read_csv("outputs/comparison/final_df_5km_2026-06-02.csv", show_col_types = FALSE)
+
+df_sf_5km <- read_sf("outputs/comparison/final_df_5km_2026-06-02.gpkg")
+
+n_5km <- nrow(df_5km)
+
+#read in prison data and filter to CA
+ca_prisons <- read_csv("outputs/final_df_2026-04-29.csv") %>% 
+  filter(STATE == "CA") %>% 
+  mutate(flood_risk_percent = flood_risk)
+
+ca_prisons_sf <- read_sf("outputs/final_df_2026-04-29.gpkg") %>% 
+  filter(STATE == "CA") %>% 
+  mutate(flood_risk_percent = flood_risk)
+
+n_facilities <- nrow(ca_prisons)
+
+#aggregate data sets for easier manipulation via imap_dfr
+datasets <- list(
+  Original = df_all, 
+  `1 km Thin` = df_1km,
+  `5 km Thin` = df_5km, 
+  Facilities = ca_prisons
+)
+
+
+#-----Column groupings-----------------------------------------------------
+#come back and add lst_avg, percent_tree_cover, and trafficProx. 
+raw_climate  <- c("flood_risk_percent", "wildfire_risk")
+raw_exposure <- c("mean_ozone", "avg_pm25",
+                  "pesticide_mean_kg")
+raw_effects  <- c("npl_prox", "rmp_prox", "haz_prox")
+raw_all      <- c(raw_climate, raw_exposure, raw_effects)
+
+cat(glue::glue("Datasets loaded: {n_all} total residences sampled, {n_facilities} total facilities"))
+
+# WGS84 version for leaflet (centroids for point plotting)
+#entire sample
+df_wgs_all <- df_sf_all %>% 
+  st_transform(4326) %>% 
+  mutate(
+    lon = st_coordinates(st_centroid(st_geometry(.)))[,1],
+    lat = st_coordinates(st_centroid(st_geometry(.)))[,2]
+  )
+
+#1km thin
+df_wgs_1km <- df_sf_1km %>% 
+  st_transform(4326) %>% 
+  mutate(
+    lon = st_coordinates(st_centroid(st_geometry(.)))[,1],
+    lat = st_coordinates(st_centroid(st_geometry(.)))[,2]
+  )
+
+#5km thin 
+df_wgs_5km <- df_sf_5km %>% 
+  st_transform(4326) %>% 
+  mutate(
+    lon = st_coordinates(st_centroid(st_geometry(.)))[,1],
+    lat = st_coordinates(st_centroid(st_geometry(.)))[,2]
+  )
+
+#CA prisons
+ca_prisons_wgs <- ca_prisons_sf %>% 
+  st_transform(4326) %>% 
+  mutate(
+    lon = st_coordinates(st_centroid(st_geometry(.)))[,1],
+    lat = st_coordinates(st_centroid(st_geometry(.)))[,2]
+  )
+
+datasets_wgs <- list(
+  Original = df_wgs_all, 
+  `1 km Thin` = df_wgs_1km,
+  `5 km Thin` = df_wgs_5km, 
+  Facilities = ca_prisons_wgs
+)
+```
+
+------------------------------------------------------------------------
+
+# Data Inventory & Quality Flags {.tabset}
+
+## Dataset Inventory
+
+```{r data-inventory}
+inventory_tbl <- tibble(
+  Dataset = c("Original Sample",
+              "1 km Thin",
+              "5 km Thin",
+              "Carceral Facilities"),
+  Description = c("Population-weighted sample points",
+                  "1 km thinning btwn points & prisons",
+                  "5 km thinning btwn points & prisons",
+                  "All available California state/federal prisons"),
+  `Number of Points` = comma(c(n_all,
+                         n_1km,
+                         n_5km,
+                         n_facilities)),
+  `Percent of Original Sample` = c("100%",
+                                   paste0(round(n_1km/n_all*100,2),"%"),
+                                   paste0(round(n_5km/n_all*100,2),"%"),
+                                   "--")
+) 
+
+inventory_tbl %>% 
+  kbl(caption="Dataset Source/Inventory") %>% 
+  kable_styling(bootstrap_options = c("striped","hover"),full_width = FALSE)
+```
+
+```{r inventory-map}
+leaflet(width="100%",height = 400) %>%
+  addProviderTiles(providers$CartoDB.Positron, group = "Positron (default)") %>%
+  addProviderTiles(providers$Esri.WorldImagery, group = "Satellite") %>%
+
+  addPolygons(
+    data        = df_wgs_all,
+    fillColor   = "#E69F00",
+    fillOpacity = 0.4,
+    color       = "#E69F00",
+    weight      = 0.8,
+    group       = "Original"
+  ) %>%
+
+  addPolygons(
+    data        = df_wgs_1km,
+    fillColor   = "#56B4E9",
+    fillOpacity = 0.4,
+    color       = "#56B4E9",
+    weight      = 0.8,
+    group       = "1 km Thin"
+  ) %>%
+
+  addPolygons(
+    data        = df_wgs_5km,
+    fillColor   = "#009E73",
+    fillOpacity = 0.4,
+    color       = "#009E73",
+    weight      = 0.8,
+    group       = "5 km Thin"
+  ) %>%
+
+  addPolygons(
+    data        = ca_prisons_wgs,
+    fillColor   = "#CC79A7",
+    fillOpacity = 0.6,
+    color       = "#CC79A7",
+    weight      = 1.2,
+    group       = "Facilities"
+  ) %>%
+
+  addLayersControl(
+    baseGroups    = c("Positron (default)", "Satellite"),
+    overlayGroups = c("Original", "1 km Thin", "5 km Thin", "Facilities"),
+    options       = layersControlOptions(collapsed = FALSE)
+  ) %>%
+
+  hideGroup("1 km Thin") %>%
+  hideGroup("5 km Thin")
+```
+
+## Completeness
+
+```{r completeness}
+
+completeness_tbl <- imap_dfr(
+  datasets,
+  ~{
+    .x %>%
+      summarise(across(everything(), ~ sum(is.na(.)))) %>%
+      pivot_longer(
+        everything(),
+        names_to = "variable",
+        values_to = "n_missing"
+      ) %>%
+      mutate(
+        dataset = .y,
+        pct_missing = n_missing / nrow(.x),
+        missing = paste0(
+          n_missing,
+          " (",
+          percent(pct_missing, accuracy = 0.1),
+          ")"
+        )
+      )
+  }
+) %>%
+  filter(variable %in% raw_all) %>% 
+  select(variable, dataset, missing) %>%
+  pivot_wider(
+    names_from = dataset,
+    values_from = missing
+  )
+
+#kble 
+completeness_tbl %>% 
+  kbl(caption="All indicator columns with missing values counted",
+      col.names = c("Indicator","Original", "1 km Thin", "5 km Thin", "Facilities")) %>% 
+  kable_styling(bootstrap_options = c("striped","hover"),full_width = FALSE)
+```
+
+```{r completeness_map-function}
+map_na <- function(datasets_wgs, var) {
+
+  palette_colors <- c(
+    "Original"   = "#E69F00",
+    "1 km Thin"  = "#56B4E9",
+    "5 km Thin"  = "#009E73",
+    "Facilities" = "#CC79A7"
+  )
+
+  subsets <- purrr::imap(
+    datasets_wgs,
+    function(df, name) {
+
+      if (!var %in% names(df)) {
+        message(glue::glue("'{var}' not found in '{name}', skipping."))
+        return(NULL)
+      }
+
+      df %>%
+        dplyr::filter(is.na(.data[[var]])) %>%
+        dplyr::mutate(.dataset = name)
+    }
+  ) %>%
+    purrr::compact()
+
+  counts <- purrr::map_int(subsets, nrow)
+
+  base_map <- leaflet(width = "100%", height = 400) %>%
+    addProviderTiles(
+      providers$CartoDB.Positron,
+      group = "Positron (default)"
+    ) %>%
+    addProviderTiles(
+      providers$Esri.WorldImagery,
+      group = "Satellite"
+    ) %>%
+    setView(lng = -119.5, lat = 37.5, zoom = 6)
+
+  final_map <- Reduce(
+    function(map, name) {
+
+      df <- subsets[[name]]
+
+      map %>%
+        addCircleMarkers(
+          data = df,
+          lng = ~lon,
+          lat = ~lat,
+          radius = 6,
+          fillColor = palette_colors[[name]],
+          color = palette_colors[[name]],
+          fillOpacity = 0.8,
+          weight = 1,
+          popup = ~glue::glue(
+            "<b>{.dataset}</b><br>",
+            "<b>{var}</b> is NA"
+          ),
+          group = name
+        )
+    },
+    x = names(subsets),
+    init = base_map
+  )
+
+  title_html <- htmltools::tags$div(
+    style = "background: white; padding: 4px 8px;
+             border-radius: 4px;
+             box-shadow: 0 1px 4px rgba(0,0,0,0.3);
+             font-size: 11px;",
+    HTML(
+      paste(
+        sprintf("<b>%s:</b> %s missing", names(counts), counts),
+        collapse = "<br>"
+      )
+    )
+  )
+
+  final_map %>%
+    addLayersControl(
+      baseGroups = c(
+        "Positron (default)",
+        "Satellite"
+      ),
+      overlayGroups = names(subsets),
+      options = layersControlOptions(collapsed = FALSE)
+    ) %>%
+    addControl(title_html, position = "bottomleft")
+}
+```
+
+Missing Values for Flood Risk Percent
+
+```{r completeness_map-1}
+
+map_na(datasets_wgs, "flood_risk_percent")
+```
+
+Missing Values for Pesticide
+
+```{r completeness_map-2}
+map_na(datasets_wgs, "pesticide_mean_kg")
+```
+
+## Range Checks
+
+```{r range-checks}
+# Expected ranges for raw indicators
+range_spec <- tribble(
+  ~column,            ~lo,   ~hi,    ~unit,
+  "flood_risk_percent",         0,   100,   "% flooded footprint",
+  "wildfire_risk",      0,    NA,   "index (unbounded)",
+  "lst_avg",           20,    60,   "°C (LST)",
+  "percent_tree_cover", 0,   100,   "% canopy",
+  "mean_ozone",        20,    90,   "ppb",
+  "avg_pm25",           0,    50,   "µg/m³",
+  "pesticide_mean_kg",  0,    NA,   "kg (unbounded)",
+  "trafficProx",        0,    NA,   "IDW (unbounded)",
+  "npl_prox",           0,    NA,   "inverse-distance score",
+  "rmp_prox",           0,    NA,   "inverse-distance score",
+  "haz_prox",           0,    NA,   "inverse-distance score"
+)
+
+#determine ranges for each dataset
+range_results <- imap_dfr(
+  datasets,
+  ~{
+    range_spec %>% 
+      rowwise() %>% 
+      mutate(
+        dataset = .y,
+        n_valid = sum(!is.na(.x[[column]])),
+        range = if(n_valid > 0)
+          paste0(
+            round(min(.x[[column]], na.rm = TRUE), 2),
+            " - ",
+            round(max(.x[[column]], na.rm = TRUE), 2)
+          )
+        else
+          "No data"
+      ) %>% 
+      ungroup()
+  }
+)
+
+#pivot and aggregate for compact table
+range_tbl <- range_results %>% 
+  select(column, dataset, range) %>% 
+  pivot_wider(
+    names_from = dataset,
+    values_from = range
+  )
+
+#kble
+#ranges we see across data sets
+range_tbl %>% 
+  kbl(caption="Range checks for raw indicators",
+      col.names = c("Indicator","Original", "1 km Thin", "5 km Thin", "Facilities")) %>% 
+  kable_styling(bootstrap_options = c("striped","hover"),full_width = FALSE)
+
+#export expected ranges
+range_spec %>% 
+  kbl(caption = "Expected ranges for raw indicators",
+      col.names = c("Indicator", "Lower Bound", "Upper Bound", "Unit")) %>% 
+  kable_styling(bootstrap_options = c("striped","hover"),full_width = FALSE)
+```
+
+## California Prisons Facility Meta Data
+
+```{r metadata}
+#population can't be added. It's unreliable. 
+ca_prisons %>% 
+  count(TYPE,name = "n_facilities") %>% 
+  arrange(desc(n_facilities)) %>% 
+  mutate(pct = percent(n_facilities/sum(n_facilities),accuracy = 0.1)) %>% 
+  kbl(caption = "California Carceral Facilities by Type",
+      col.names = c("Type", "Num. Facilities", "Total Percentage")) %>% 
+  kable_styling(bootstrap_options = c("striped","hover"),full_width = FALSE)
+```
+
+------------------------------------------------------------------------
+
+# Raw Indicator Exploration
+
+```{r}
+#aggregate data function for plotting
+make_plot_df <- function(data_list, variable, order = NULL){
+  out <- imap_dfr(
+    data_list,
+    ~transmute(
+      .x, 
+      data_source = .y, 
+      value = .data[[variable]]
+    )
+  )
+  
+  if(!is.null(order)){
+    out <- out %>% 
+      mutate(
+      data_source = factor(
+        data_source, levels = rev(order)
+      )
+    )
+  }
+  out
+}
+
+summarize_distribution <- function(plot_df){
+  plot_df %>% group_by(data_source) %>% 
+    summarize(
+      Min. = min(value,na.rm = TRUE),
+      '1st Qu.' = quantile(value,probs=.25,na.rm=TRUE),
+      Median = median(value,na.rm = TRUE),
+      Mean = mean(value, na.rm= TRUE),
+      '3rd Qu.' = quantile(value,probs=0.75,na.rm=TRUE),
+      Max. = max(value, na.rm = TRUE), 
+      .groups = "drop"
+    )
+}
+
+#map function for percentiles
+map_quantile_subset <- function(datasets_wgs, var, quantile_thresh = 0.9) {
+  
+  #find quantile in original subset
+  if (!var %in% names(datasets_wgs[["Original"]])) {
+    stop(glue::glue("'{var}' not found in the Original dataset."))
+  }
+  threshold <- quantile(datasets_wgs[["Original"]][[var]], quantile_thresh, na.rm = TRUE)
+  
+  #subset each dataset using shared threshold
+  subsets <- imap(datasets_wgs, function(df, name) {
+    if (!var %in% names(df)) {
+      message(glue::glue("'{var}' not found in '{name}', skipping."))
+      return(NULL)
+    }
+    df %>%
+      filter(.data[[var]] >= threshold) %>%
+      mutate(
+        .dataset    = name,
+        .thresh_val = round(threshold, 3),
+        .var_val    = round(.data[[var]], 3)
+      )
+  }) %>%
+    compact()
+  
+  #Give datasets a color
+  palette_colors <- c(
+    "Original"   = "#E69F00",
+    "1 km Thin"  = "#56B4E9",
+    "5 km Thin"  = "#009E73",
+    "Facilities" = "#CC79A7"
+  )
+  
+  #Base map 
+  base_map <- leaflet(width = "100%", height = 400) %>%
+    addProviderTiles(providers$CartoDB.Positron, group = "Positron (default)") %>%
+    addProviderTiles(providers$Esri.WorldImagery, group = "Satellite") %>%
+    setView(lng = -119.5, lat = 37.5, zoom = 6)
+  
+  #Reduce over layers
+  final_map <- Reduce(function(map, name) {
+    df    <- subsets[[name]]
+    color <- palette_colors[[name]] %||% "#999999"
+    
+    map %>%
+      addCircleMarkers(
+        data        = df,
+        lng         = ~lon,
+        lat         = ~lat,
+        radius      = 7,
+        fillColor   = color,
+        fillOpacity = 0.85,
+        color       = color,
+        weight      = 1,
+        popup       = ~glue::glue(
+          "<b>{.dataset}</b><hr>",
+          "<b>{var}:</b> {.var_val}<br>",
+          "<b>Threshold ({quantile_thresh * 100}th pct):</b> {.thresh_val}"
+        ),
+        group = name
+      )
+  }, x = names(subsets), init = base_map)
+  
+  # Count points for title box
+  n_original   <- nrow(subsets[["Original"]])
+  n_facilities <- if ("Facilities" %in% names(subsets)) nrow(subsets[["Facilities"]]) else 0
+  
+  # build legend and title
+  title_html <- htmltools::tags$div(
+    style = "background: white; padding: 4px 8px; border-radius: 4px;
+             box-shadow: 0 1px 4px rgba(0,0,0,0.3); font-size: 11px;
+             max-width: 280px; line-height: 1.6;",
+    HTML(glue::glue(
+      "<b>{var}</b> &ge; {quantile_thresh * 100}th percentile<br>
+       Threshold (Original): {round(threshold, 3)}<br>
+       <b>Original sample:</b> {n_original} points<br>
+       <b>Facilities:</b> {n_facilities} at or above threshold"
+    ))
+  )
+  
+  final_map %>%
+    addLayersControl(
+      baseGroups    = c("Positron (default)", "Satellite"),
+      overlayGroups = names(subsets),
+      options       = layersControlOptions(collapsed = FALSE)
+    ) %>%
+    addControl(title_html, position = "topright")
+}
+
+#map function for thresholds
+map_threshold <- function(datasets_wgs, var, threshold,
+                          var_label = NULL, units = NULL,
+                          standard_label = NULL) {
+  
+  #build labels for title box (and fix null if nothing is provided)
+  var_label      <- var_label      %||% var
+  units          <- units          %||% ""
+  standard_label <- standard_label %||% ""
+  
+  # check var exists in Original
+  if (!var %in% names(datasets_wgs[["Original"]])) {
+    stop(glue::glue("'{var}' not found in the Original dataset."))
+  }
+  
+  # calculate how many points are above threshold
+   n_exceed_original <- sum(datasets_wgs[["Original"]][[var]]   >= threshold, na.rm = TRUE)
+  n_exceed_facilities <- sum(datasets_wgs[["Facilities"]][[var]] >= threshold, na.rm = TRUE)
+  
+  # subset each dataset
+  subsets <- imap(datasets_wgs, function(df, name) {
+    if (!var %in% names(df)) {
+      message(glue::glue("'{var}' not found in '{name}', skipping."))
+      return(NULL)
+    }
+    df %>%
+      filter(.data[[var]] >= threshold) %>%
+      mutate(
+        .dataset = name,
+        .var_val = round(.data[[var]], 3)
+      )
+  }) %>%
+    compact()
+  
+  # set color palette scoped to Original domain 
+  pal <- colorNumeric(
+    "Purples",
+    domain   = datasets_wgs[["Original"]][[var]],
+    na.color = "#aaaaaa"
+  )
+  
+  original_vals <- datasets_wgs[["Original"]][[var]]
+  
+  # for colored rings
+  palette_colors <- c(
+    "Original"   = "#E69F00",
+    "1 km Thin"  = "#56B4E9",
+    "5 km Thin"  = "#009E73",
+    "Facilities" = "#CC79A7"
+  )
+  
+  # build base map 
+  base_map <- leaflet(width = "100%", height = 400) %>%
+    addProviderTiles(providers$CartoDB.Positron, group = "Positron (default)") %>%
+    addProviderTiles(providers$Esri.WorldImagery, group = "Satellite") %>%
+    setView(lng = -119.5, lat = 37.5, zoom = 6)
+  
+  # reduce over layers 
+  final_map <- Reduce(function(map, name) {
+    df    <- subsets[[name]]
+    color <- palette_colors[[name]] %||% "#999999"
+    
+    map %>%
+      addCircleMarkers(
+        data        = df,
+        lng         = ~lon,
+        lat         = ~lat,
+        radius      = 7,
+        fillColor   = ~pal(get(var)),
+        fillOpacity = 0.85,
+        color       = color,
+        weight      = 1,
+        popup       = ~glue::glue(
+          "<b>{.dataset}</b><hr>",
+          "<b>{var_label}:</b> {.var_val} {units}<br>",
+          "<b>Threshold:</b> {threshold} {units}"
+        ),
+        group = name
+      )
+  }, x = names(subsets), init = base_map)
+  
+  # Legend and title 
+  title_html <- htmltools::tags$div(
+    style = "background: white; padding: 4px 8px; border-radius: 4px;
+             box-shadow: 0 1px 4px rgba(0,0,0,0.3); font-size: 11px;
+             max-width: 280px; line-height: 1.6;",
+    HTML(glue::glue(
+      "<b>{var_label}</b> &ge; {threshold}{units} {standard_label}<br> 
+       <b>Original sample:</b> {n_exceed_original} points at or above threshold<br>
+       <b>Facilities:</b> {n_exceed_facilities} at or above threshold<br>"
+    ))
+  )
+  
+  final_map %>%
+    addLegend(
+      "bottomright",
+      pal     = pal,
+      values  = original_vals,
+      title   = glue::glue("{var_label} ({units})"),
+      opacity = 0.8
+    ) %>%
+    addLayersControl(
+      baseGroups    = c("Positron (default)", "Satellite"),
+      overlayGroups = names(subsets),
+      options       = layersControlOptions(collapsed = FALSE)
+    ) %>%
+    addControl(title_html, position = "bottomleft")
+}
+```
+
+------------------------------------------------------------------------
+
+## Climate Indicators {.tabset}
+
+### Flood Risk {.tabset}
+
+#### Plot & Table
+
+```{r flood-plot}
+make_plot_df(datasets, 
+             "flood_risk_percent",
+             order = c("Facilities", 
+                       "Original", 
+                       "1 km Thin", 
+                       "5 km Thin")) %>% 
+  summarize_distribution() %>% 
+  kbl(caption="Distribution of Flood Risk Across Datasources") %>% 
+  kable_styling(bootstrap_options = c("striped","hover"),full_width = FALSE)
+  
+
+make_plot_df(datasets, 
+             "flood_risk_percent",
+             order = c("Facilities", 
+                       "Original", 
+                       "1 km Thin", 
+                       "5 km Thin")) %>% 
+  ggplot(aes(x=value,
+             y=data_source,
+             fill=data_source))+
+  geom_density_ridges2(jittered_points = TRUE, quantile_lines = TRUE, scale = 0.9, alpha = 0.7,
+    vline_width = 1, vline_color = "red",
+    point_size = 0.4, point_alpha = 1,
+    position = position_raincloud(adjust_vlines = TRUE))+
+  labs(
+    title = "Density Ridge Plots of Flood Risk",
+    y = "Data Source",
+    x = "Values"
+  )+
+  theme(legend.position = "none")+
+  theme_minimal()
+
+```
+
+#### Map
+
+```{r flood-map, out.width="100%",fig.height=4}
+map_threshold(datasets_wgs,
+              "flood_risk_percent",
+              50,
+              "Flood Risk Percent", 
+              units = "%")
+```
+
+### Wildfire Risk {.tabset}
+
+#### Plot & Table
+
+```{r wildfire}
+make_plot_df(datasets, 
+             "wildfire_risk",
+             order = c("Facilities", 
+                       "Original", 
+                       "1 km Thin", 
+                       "5 km Thin")) %>% 
+  summarize_distribution() %>% 
+  kbl(caption="Distribution of Wildfire Risk Across Datasources") %>% 
+  kable_styling(bootstrap_options = c("striped","hover"),full_width = FALSE)
+  
+make_plot_df(datasets, 
+             "wildfire_risk",
+             order = c("Facilities", 
+                       "Original", 
+                       "1 km Thin", 
+                       "5 km Thin")) %>% 
+  ggplot(aes(x=value,
+             y=data_source,
+             fill=data_source))+
+  scale_x_continuous(transform = "log1p",
+                     labels = comma)+
+  geom_density_ridges(jittered_points = TRUE, quantile_lines = TRUE, scale = 0.9, alpha = 0.7,
+    vline_width = 1, vline_color = "red",
+    point_size = 0.4, point_alpha = 1,
+    position = position_raincloud(adjust_vlines = TRUE))+
+  labs(
+    title = "Density Ridge Plots of Wildfire Risk",
+    y = "Data Source",
+    x = "Values"
+  )+
+  theme(legend.position = "none",    
+        axis.text.x = element_text(angle = 90, vjust = 0.5, hjust = 1)
+)+
+  theme_minimal()
+
+```
+
+#### Map
+
+```{r}
+map_quantile_subset(datasets_wgs,
+                    "wildfire_risk",
+                    0.99)
+```
+
+------------------------------------------------------------------------
+
+## Exposure Indicators {.tabset}
+
+### Mean Ozone {.tabset}
+
+#### Plot & Table
+
+```{r ozone}
+make_plot_df(datasets, 
+             "mean_ozone",
+             order = c("Facilities", 
+                       "Original", 
+                       "1 km Thin", 
+                       "5 km Thin")) %>% 
+  summarize_distribution() %>% 
+  kbl(caption="Distribution of Average Ozone Across Datasources") %>% 
+  kable_styling(bootstrap_options = c("striped","hover"),full_width = FALSE)
+
+make_plot_df(datasets, 
+             "mean_ozone",
+             order = c("Facilities", 
+                       "Original", 
+                       "1 km Thin", 
+                       "5 km Thin")) %>% 
+  ggplot(aes(x=value,
+             y=data_source,
+             fill=data_source))+
+  geom_density_ridges2(jittered_points = TRUE, quantile_lines = TRUE, scale = 0.9, alpha = 0.7,
+    vline_width = 1, vline_color = "red",
+    point_size = 0.4, point_alpha = 1,
+    position = position_raincloud(adjust_vlines = TRUE))+
+  labs(
+    title = "Density Ridge Plots of Mean Ozone",
+    y = "Data Source",
+    x = "Values"
+  )+
+  theme(legend.position = "none")+
+  theme_minimal()
+
+```
+
+#### Map
+
+```{r ozone-map}
+map_threshold(
+  datasets_wgs   = datasets_wgs,
+  var            = "mean_ozone",
+  threshold      = 70,
+  var_label      = "Mean Ozone",
+  units          = " ppb",
+  standard_label = "(NAAQS standard)"
+)
+
+```
+
+### PM 2.5 {.tabset}
+
+#### Plot & Table
+
+```{r pm_25}
+make_plot_df(datasets, 
+             "avg_pm25",
+             order = c("Facilities", 
+                       "Original", 
+                       "1 km Thin", 
+                       "5 km Thin")) %>% 
+  summarize_distribution() %>% 
+  kbl(caption="Distribution of Avg. PM 2.5 Across Datasources") %>% 
+  kable_styling(bootstrap_options = c("striped","hover"),full_width = FALSE)
+
+make_plot_df(datasets, 
+             "avg_pm25",
+             order = c("Facilities", 
+                       "Original", 
+                       "1 km Thin", 
+                       "5 km Thin")) %>% 
+  ggplot(aes(x=value,
+             y=data_source,
+             fill=data_source))+
+  geom_density_ridges2(jittered_points = TRUE, quantile_lines = TRUE, scale = 0.9, alpha = 0.7,
+    vline_width = 1, vline_color = "red",
+    point_size = 0.4, point_alpha = 1,
+    position = position_raincloud(adjust_vlines = TRUE))+
+  labs(
+    title = "Density Ridge Plots of Avg. PM 2.5",
+    y = "Data Source",
+    x = "Values"
+  )+
+  theme(legend.position = "none")+
+  theme_minimal()
+
+```
+
+#### Map
+
+```{r pm_25-map}
+map_threshold(
+  datasets_wgs   = datasets_wgs,
+  var            = "avg_pm25",
+  threshold      = 12,
+  var_label      = "PM2.5",
+  units          = " &micro;g/m&sup3;",
+  standard_label = "(NAAQS annual standard)"
+)
+```
+
+### Pesticide Load {.tabset}
+
+#### Plot & Table
+
+```{r pesticide}
+make_plot_df(datasets, 
+             "pesticide_mean_kg",
+             order = c("Facilities", 
+                       "Original", 
+                       "1 km Thin", 
+                       "5 km Thin")) %>% 
+  summarize_distribution() %>% 
+  kbl(caption="Distribution of Pesticide Load Across Datasources") %>% 
+  kable_styling(bootstrap_options = c("striped","hover"),full_width = FALSE)
+
+make_plot_df(datasets, 
+             "pesticide_mean_kg",
+             order = c("Facilities", 
+                       "Original", 
+                       "1 km Thin", 
+                       "5 km Thin")) %>% 
+  ggplot(aes(x=value,
+             y=data_source,
+             fill=data_source))+
+  geom_density_ridges2(jittered_points = TRUE, quantile_lines = TRUE, scale = 0.9, alpha = 0.7,
+    vline_width = 1, vline_color = "red",
+    point_size = 0.4, point_alpha = 1,
+    position = position_raincloud(adjust_vlines = TRUE))+
+  scale_x_continuous(transform = "log1p",
+                     labels = comma)+
+  labs(
+    title = "Density Ridge Plots of log(1+Average Pesticide) (kg)",
+    y = "Data Source",
+    x = "Values"
+  )+
+  theme(legend.position = "none")+
+  theme_minimal()
+
+```
+
+#### Map
+
+```{r pesticide-map}
+map_quantile_subset(datasets_wgs,
+                    "pesticide_mean_kg",
+                    quantile_thresh = 0.95)
+```
+
+### Traffic Proximity {.tabset}
+
+#### Plot & Table
+
+```{r}
+# make_plot_df(datasets, 
+#              "traffic_proximity",
+#              order = c("Facilities", 
+#                        "Original", 
+#                        "1 km Thin", 
+#                        "5 km Thin")) %>% 
+#   ggplot(aes(x=value,
+#              y=data_source,
+#              fill=data_source))+
+#   geom_density_ridges2(jittered_points = TRUE, quantile_lines = TRUE, scale = 0.9, alpha = 0.7,
+#     vline_width = 1, vline_color = "red",
+#     point_size = 0.4, point_alpha = 1,
+#     position = position_raincloud(adjust_vlines = TRUE))+
+      # scale_x_continuous(transform = "log1p",
+                     # labels = comma)+
+#   labs(
+#     title = "Density Ridge Plots of Traffic Proximity",
+#     y = "Data Source",
+#     x = "Values"
+#   )+
+#   theme(legend.position = "none")+
+#   theme_minimal()
+
+```
+
+------------------------------------------------------------------------
+
+## Effects Indicators {.tabset}
+
+### NPL Proximity {.tabset}
+
+#### Plot & Table
+
+```{r npl}
+make_plot_df(datasets, 
+             "npl_prox",
+             order = c("Facilities", 
+                       "Original", 
+                       "1 km Thin", 
+                       "5 km Thin")) %>% 
+  summarize_distribution() %>% 
+  kbl(caption="Distribution of NPL Proximity Across Datasources") %>% 
+  kable_styling(bootstrap_options = c("striped","hover"),full_width = FALSE)
+
+make_plot_df(datasets, 
+             "npl_prox",
+             order = c("Facilities", 
+                       "Original", 
+                       "1 km Thin", 
+                       "5 km Thin")) %>% 
+  ggplot(aes(x=value,
+             y=data_source,
+             fill=data_source))+
+  geom_density_ridges2(jittered_points = TRUE, quantile_lines = TRUE, scale = 0.9, alpha = 0.7,
+    vline_width = 1, vline_color = "red",
+    point_size = 0.4, point_alpha = 1,
+    position = position_raincloud(adjust_vlines = TRUE))+
+  scale_x_continuous(transform = "log1p",
+                     labels = comma)+
+  labs(
+    title = "Density Ridge Plots of NPL Proximity",
+    y = "Data Source",
+    x = "Values"
+  )+
+  theme(legend.position = "none")+
+  theme_minimal()
+
+
+```
+
+#### Map
+
+```{r npl-map}
+map_quantile_subset(datasets_wgs, 
+                    "npl_prox",
+                    quantile_thresh = 0.9)
+```
+
+### RMP Proximity {.tabset}
+
+#### Plot & Table
+
+```{r rmp}
+make_plot_df(datasets, 
+             "rmp_prox",
+             order = c("Facilities", 
+                       "Original", 
+                       "1 km Thin", 
+                       "5 km Thin")) %>% 
+  summarize_distribution() %>% 
+  kbl(caption="Distribution of RMP Proximity Across Datasources") %>% 
+  kable_styling(bootstrap_options = c("striped","hover"),full_width = FALSE)
+
+make_plot_df(datasets, 
+             "rmp_prox",
+             order = c("Facilities", 
+                       "Original", 
+                       "1 km Thin", 
+                       "5 km Thin")) %>% 
+  ggplot(aes(x=value,
+             y=data_source,
+             fill=data_source))+
+  geom_density_ridges2(jittered_points = TRUE, quantile_lines = TRUE, scale = 0.9, alpha = 0.7,
+    vline_width = 1, vline_color = "red",
+    point_size = 0.4, point_alpha = 1,
+    position = position_raincloud(adjust_vlines = TRUE))+
+  scale_x_continuous(transform = "log1p",
+                     labels = comma)+
+  labs(
+    title = "Density Ridge Plots of RMP Proximity",
+    y = "Data Source",
+    x = "Values"
+  )+
+  theme(legend.position = "none")+
+  theme_minimal()
+
+
+```
+
+#### Map
+
+```{r rmp-map}
+map_quantile_subset(datasets_wgs,
+                    "rmp_prox")
+```
+
+### Hazardous Waste Proximity {.tabset}
+
+#### Plot and Table
+
+```{r haz}
+make_plot_df(datasets, 
+             "haz_prox",
+             order = c("Facilities", 
+                       "Original", 
+                       "1 km Thin", 
+                       "5 km Thin")) %>% 
+  summarize_distribution() %>% 
+  kbl(caption="Distribution of Hazardous Waste Proximity Across Datasources") %>% 
+  kable_styling(bootstrap_options = c("striped","hover"),full_width = FALSE)
+
+
+make_plot_df(datasets, 
+             "haz_prox",
+             order = c("Facilities", 
+                       "Original", 
+                       "1 km Thin", 
+                       "5 km Thin")) %>% 
+  ggplot(aes(x=value,
+             y=data_source,
+             fill=data_source))+
+  geom_density_ridges2(jittered_points = TRUE, quantile_lines = TRUE, scale = 0.9, alpha = 0.7,
+    vline_width = 1, vline_color = "red",
+    point_size = 0.4, point_alpha = 1,
+    position = position_raincloud(adjust_vlines = TRUE))+
+  scale_x_continuous(transform = "log1p",
+                     labels = comma)+
+  labs(
+    title = "Density Ridge Plots of Hazardous Waste Proximity",
+    y = "Data Source",
+    x = "Values"
+  )+
+  theme(legend.position = "none")+
+  theme_minimal()
+
+```
+
+#### Map
+
+```{r haz-map}
+map_quantile_subset(datasets_wgs,
+                    "haz_prox")
+```
+
+------------------------------------------------------------------------
+
+# Quantifying the Effects of Thinning
+
+The intent of thinning is to mitigate the dependence/sharing that nearby points have with each other. Points that are close together may strongly impact their shared values. Here, the question is to determine whether the 1 km thin or the 5 km thin mitigates this spatial dependence.
+
+```{r correlation, cache = TRUE}
+#make sure all datasets are the on the same crs
+datasets_thinned <- datasets_wgs[c(2,3)] #look at only thinned 
+datasets_albers <- lapply(datasets_thinned, st_transform, crs = 3310)
+
+# Precompute coords once per dataset
+coords_list <- lapply(datasets_albers, function(sf_obj) {
+  st_coordinates(st_centroid(sf_obj))
+})
+
+all_corr <- map_dfr(raw_all, function(var){
+  map_dfr(names(datasets_albers), function(dataset){
+    sf_obj <- datasets_albers[[dataset]]
+    coords <- coords_list[[dataset]]
+    vals <- sf_obj[[var]]
+    
+    fit <- ncf::correlog(x = coords[,1], y = coords[,2], z = vals,
+                         increment = 10000, resamp = 0, na.rm = TRUE)
+    
+    data.frame(mean.of.class = fit$mean.of.class,
+               correlation = fit$correlation) %>%
+      mutate(dataset = dataset, variable = var)
+  })
+})
+
+all_corr <- all_corr %>% 
+  filter(correlation >= -1, correlation <= 1)
+
+all_corr %>% ggplot(aes(x = mean.of.class / 1000, y = correlation, color = dataset)) +
+  geom_line() +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  xlim(0,500)+
+  facet_wrap(~ variable) +
+  labs(x = "Distance (km)", y = "Moran's I", color = NULL) +
+  theme_minimal()
+```
+
+# Analysis Plan
+
+## Research Question
+
+*Are the environmental indicators for Californian state and federal prisons worse than Californian residential areas?*
+
+Because we are considering the Californian carceral facilities to be *all* state and federal prisons, we are treating the mean indicator values as the true population mean indicators. This means, that we are fundamentally testing if the Californian residences have smaller mean environmental mean indicators than the prisons. Formally written, our hypothesis is: $$
+\text{H}_0: \boldsymbol{\mu}_\text{Residences} = \boldsymbol{\mu}_{\text{Prisons}}\text{ vs. } \text{H}_1: \boldsymbol{\mu}_\text{Residences} \le \boldsymbol{\mu}_\text{Prisons}
+$$ To test this hypothesis, we have randomly sampled Californian residences from a high-density population raster and thinned them to have at least 1 km or 5 km spacing in between them (and the prisons). At each sampled point, we drew a buffer of 140.4 m to match the median square footage for Californian prisons.
+
+## Setting up our test
+
+To avoid a multiple testing problem we will first test these values as a multivariate mean vector, and if results are significant consider individual testing to determine the truth.
+
+For each residential location in our sample, we subtract the prison population mean from the residential value for each indicator. Under $\text H_1$, these differences should all be negative — meaning every indicator is lower for residences than for prisons. We multiply these differences by $−1$ so that a positive value means the residence is better off on that indicator, allowing us to reframe the hypothesis as testing whether the average flipped differences are greater than zero across all indicators simultaneously. This is purely a bookkeeping convenience that allows us to apply the positive orthant bootstrap test of Minhajuddin et al. (2007) directly and does not affect our conclusions.
+
+### Why use a bootstrap test
+
+A standard multivariate test of means assumes the data follow a multivariate normal distribution — essentially that all the indicators together follow a specific bell-curve shape jointly. For environmental data, this is often not realistic because:
+
+As shown in section 3, environmental indicators tend to be right-skewed (most locations have moderate values but a few have very large values) The joint normality assumption across all indicators simultaneously is a strong requirement that is difficult to verify.
+
+While it is true that averages of large samples tend to be normally distributed (by the central limit theorem), we prefer not to rely on this approximation given the skewed nature of environmental data.
+
+Instead, we use a bootstrap test, which works by repeatedly resampling our data to build up a picture of what results would look like by chance if there were no true difference. This approach makes no assumptions about the shape of the data distribution and has been shown to perform well even when data are skewed.
+
+## Testing Procedure
+
+We run two versions of the bootstrap test following Minhajuddin et al. (2007): Primary test (BT) tests $\text{H}_0: \boldsymbol{\delta}^* = 0$, where $\boldsymbol\delta^* = -1(\boldsymbol{\mu_\text{Residences}}-\boldsymbol{\mu_\text{Prisons}})$ is the flipped difference vector of mean environmental indicators. Our procedures is as as follows:
+
+1.  Compute the observed result: Calculate the average flipped difference across all indicators for our sample, and summarize it as a single test statistic that captures how far into the "residences are better" region our data falls.
+
+2.  Simulate the null world: We recenter our data to have a mean of zero and resample from it $B$ times, computing the test statistic each time. This builds up a distribution of what results look like when there is *no* true effect.
+
+3.  Compare: Count how many of those $B$ simulated results are as extreme or more extreme than what we actually observed. This proportion is our p-value.
+
+4.  Conclude: If the p-value is below 0.05, we conclude there is statistically significant evidence that California residents experience lower environmental burdens than incarcerated individuals across all indicators simultaneously.
+
+5.  Sensitivity check (MBT) tests the stricter null $\text{H}_0: \boldsymbol{\delta}^* \notin O^{+}$, asking not just whether the means are equal but whether there is any possibility that residential indicators are actually worse than prison indicators. This version is harder to reject and guards more carefully against false positives. If both BT and MBT agree, we can be especially confident in the conclusion.
+
+## Follow-Up Analysis: Which Indicators Are Driving the Difference?  
+If the multivariate test is significant, we will follow up with individual one-sided tests on each of the 11 indicators separately to identify which ones are contributing to the overall finding. This two-stage structure is intentional and well accepted — the multivariate test in Stage 1 protects us globally, and we only proceed to Stage 2 if Stage 1 finds a significant result.
+
+Because we are running 11 separate tests in Stage 2, we will apply a Benjamini-Hochberg correction to control the false discovery rate. This procedure is less conservative than alternatives like Bonferroni while still guarding against false positives, making it appropriate for our setting with 11 indicators. Indicators that remain significant after this correction will be interpreted as individually contributing to the overall environmental burden difference. These follow-up tests are exploratory and descriptive in nature — the primary confirmatory finding is the multivariate test result.
+
+## Reference
+Minhajuddin, A.T.M., Frawley, W.H., Schucany, W.R., & Woodward, W.A. (2007). Bootstrap tests for multivariate directional alternatives. Journal of Statistical Planning and Inference, 137, 2302–2315.
