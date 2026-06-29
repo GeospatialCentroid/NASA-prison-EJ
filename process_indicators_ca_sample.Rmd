@@ -181,7 +181,8 @@ heat_exp <- read_csv("data/ca_sample/ca_comparison_lst_daily_MODIS_2026-06-17.cs
   group_by(object_id) %>%
   summarise(lst_avg = median(LST_mean, na.rm = TRUE))
 
-canopy_cover <- read_csv("data/ca_sample/ca_sample_canopy_CONUS.csv") 
+canopy_cover <- read_csv("data/ca_sample/ca_sample_canopy_CONUS.csv")%>%
+  rename(percent_tree_cover = NLCD_Percent_Tree_Canopy_Cover)
 
 # environmental exposures:
 ozone <- read_csv("outputs/comparison/ozone_2026-06-01.csv")
