@@ -208,7 +208,7 @@ Next, let's combine into one data frame and save each subset as presented above.
 final_df <- list(ca_residences,
                  flood_risk, wildfire_risk, heat_exp, 
                  canopy_cover, ozone, pm25, pesticides, 
-                 npl_prox, rmp_prox, haz_prox) %>% 
+                 traffic,npl_prox, rmp_prox, haz_prox) %>% 
   purrr::reduce(left_join, by = "object_id") %>% 
   #make object id a character
   mutate(object_id = as.character(object_id)) 
