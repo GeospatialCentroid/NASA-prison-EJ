@@ -168,7 +168,7 @@ haz_prox <- calc_haz_waste_proximity(
 
 ### Final Data Frame
 
-Because many indicators take a long time to run, let's read in each of the indicators. (In other words, it may be unrealistic to generate each indicator in a single session.) Be sure to read in indicators from GEE as well!
+Because many indicators take a long time to run, let's read in each of the indicators. (In other words, it may be unrealistic to generate each indicator in a single session.) Be sure to read in indicators from GEE as well--note these updates are held in `data/ca_sample/`.
 
 ```{r}
 # read in indicators 
@@ -177,9 +177,11 @@ flood_risk <- read_csv("outputs/comparison/flood_risk_2026-06-01.csv")
 
 wildfire_risk <- read_csv("outputs/comparison/wildfire_risk_2026-06-01.csv")
 
-#heat_exp <- read_csv("outputs/comparison/....") %>% group_by(object_id)...
+heat_exp <- read_csv("data/ca_sample/ca_comparison_lst_daily_MODIS_2026-06-17.csv") %>% 
+  group_by(object_id) %>%
+  summarise(lst_avg = median(LST_mean, na.rm = TRUE))
 
-#canopy_cover <- read_csv("outputs/comparison/....") 
+canopy_cover <- read_csv("data/ca_sample/ca_sample_canopy_CONUS.csv") 
 
 # environmental exposures:
 ozone <- read_csv("outputs/comparison/ozone_2026-06-01.csv")
@@ -188,7 +190,7 @@ pm25 <- read_csv("outputs/comparison/pm25_2026-06-01.csv")
 
 pesticides <- read_csv("outputs/comparison/pesticides_2026-06-02.csv")
 
-#traffic <- read_csv("outputs/comparison/...")
+traffic <- read_csv("outputs/comparison/traffic_proximity_2026-06-26.csv")
 
 # environmental effects: 
 npl_prox <- read_csv("outputs/comparison/npl_proximity_2026-06-01.csv")
@@ -202,11 +204,10 @@ Next, let's combine into one data frame and save each subset as presented above.
 
 ```{r}
 # combine into single data frame 
-# (again, be sure to update with GEE indicators and traffic_prox)
 final_df <- list(ca_residences,
-                 flood_risk, wildfire_risk, 
-                 ozone, pm25, pesticides, 
-                 npl_prox, rmp_prox,haz_prox) %>% 
+                 flood_risk, wildfire_risk, heat_exp, 
+                 canopy_cover, ozone, pm25, pesticides, 
+                 npl_prox, rmp_prox, haz_prox) %>% 
   purrr::reduce(left_join, by = "object_id") %>% 
   #make object id a character
   mutate(object_id = as.character(object_id)) 
