@@ -56,23 +56,23 @@ This report provides a structured quality assessment and exploratory analysis of
 ```{r load-data}
 #-----Load data------------------------------------------------------------
 #read in all data
-df_all <- read_csv("outputs/comparison/final_df_all_2026-06-02.csv", show_col_types = FALSE)
+df_all <- read_csv("outputs/comparison/final_df_all_2026-06-29.csv", show_col_types = FALSE)
 
-df_sf_all <- read_sf("outputs/comparison/final_df_all_2026-06-02.gpkg")
+df_sf_all <- read_sf("outputs/comparison/final_df_all_2026-06-29.gpkg")
 
 n_all <- nrow(df_all)
 
 #read in 1km thin
-df_1km <- read_csv("outputs/comparison/final_df_1km_2026-06-02.csv", show_col_types = FALSE)
+df_1km <- read_csv("outputs/comparison/final_df_1km_2026-06-29.csv", show_col_types = FALSE)
 
-df_sf_1km <- read_sf("outputs/comparison/final_df_1km_2026-06-02.gpkg")
+df_sf_1km <- read_sf("outputs/comparison/final_df_1km_2026-06-29.gpkg")
 
 n_1km <- nrow(df_1km)
 
 #read in 5km thin
-df_5km <- read_csv("outputs/comparison/final_df_5km_2026-06-02.csv", show_col_types = FALSE)
+df_5km <- read_csv("outputs/comparison/final_df_5km_2026-06-29.csv", show_col_types = FALSE)
 
-df_sf_5km <- read_sf("outputs/comparison/final_df_5km_2026-06-02.gpkg")
+df_sf_5km <- read_sf("outputs/comparison/final_df_5km_2026-06-29.gpkg")
 
 n_5km <- nrow(df_5km)
 
@@ -98,9 +98,9 @@ datasets <- list(
 
 #-----Column groupings-----------------------------------------------------
 #come back and add lst_avg, percent_tree_cover, and trafficProx. 
-raw_climate  <- c("flood_risk_percent", "wildfire_risk")
+raw_climate  <- c("flood_risk_percent", "wildfire_risk","lst_avg","percent_tree_cover")
 raw_exposure <- c("mean_ozone", "avg_pm25",
-                  "pesticide_mean_kg")
+                  "pesticide_mean_kg","trafficProx")
 raw_effects  <- c("npl_prox", "rmp_prox", "haz_prox")
 raw_all      <- c(raw_climate, raw_exposure, raw_effects)
 
@@ -372,6 +372,13 @@ Missing Values for Pesticide
 ```{r completeness_map-2}
 map_na(datasets_wgs, "pesticide_mean_kg")
 ```
+
+Missing Values for Land Surface Temperature
+```{r completeness_map-3}
+map_na(datasets_wgs, "lst_avg")
+```
+
+
 
 ## Range Checks
 
@@ -793,6 +800,112 @@ map_quantile_subset(datasets_wgs,
 
 ------------------------------------------------------------------------
 
+
+### Land Surface Temperature {.tabset}
+
+#### Plot & Table  
+```{r lst-plot}
+make_plot_df(datasets, 
+             "lst_avg",
+             order = c("Facilities", 
+                       "Original", 
+                       "1 km Thin", 
+                       "5 km Thin")) %>% 
+  summarize_distribution() %>% 
+  kbl(caption="Distribution of Average Land Surface Temperature Across Datasources") %>% 
+  kable_styling(bootstrap_options = c("striped","hover"),full_width = FALSE)
+  
+
+make_plot_df(datasets, 
+             "lst_avg",
+             order = c("Facilities", 
+                       "Original", 
+                       "1 km Thin", 
+                       "5 km Thin")) %>% 
+  ggplot(aes(x=value,
+             y=data_source,
+             fill=data_source))+
+  geom_density_ridges2(jittered_points = TRUE, quantile_lines = TRUE, scale = 0.9, alpha = 0.7,
+    vline_width = 1, vline_color = "red",
+    point_size = 0.4, point_alpha = 1,
+    position = position_raincloud(adjust_vlines = TRUE))+
+  labs(
+    title = "Density Ridge Plots of Avg LST",
+    y = "Data Source",
+    x = "Values"
+  )+
+  theme(legend.position = "none")+
+  theme_minimal()
+
+```
+
+#### Map  
+```{r lst-map}
+map_quantile_subset(datasets_wgs,
+                    "lst_avg",
+                    quantile_thresh = )
+```
+  
+### Canopy Cover {.tabset}  
+
+#### Plot & Table  
+```{r canopy_cover}
+make_plot_df(datasets, 
+             "percent_tree_cover",
+             order = c("Facilities", 
+                       "Original", 
+                       "1 km Thin", 
+                       "5 km Thin")) %>% 
+  summarize_distribution() %>% 
+  kbl(caption="Distribution of Percent Tree Cover Across Datasources") %>% 
+  kable_styling(bootstrap_options = c("striped","hover"),full_width = FALSE)
+  
+
+make_plot_df(datasets, 
+             "percent_tree_cover",
+             order = c("Facilities", 
+                       "Original", 
+                       "1 km Thin", 
+                       "5 km Thin")) %>% 
+  ggplot(aes(x=value,
+             y=data_source,
+             fill=data_source))+
+  geom_density_ridges2(jittered_points = TRUE, quantile_lines = TRUE, scale = 0.9, alpha = 0.7,
+    vline_width = 1, vline_color = "red",
+    point_size = 0.4, point_alpha = 1,
+    position = position_raincloud(adjust_vlines = TRUE))+
+  labs(
+    title = "Density Ridge Plots of Percent Tree Cover",
+    y = "Data Source",
+    x = "Values"
+  )+
+  theme(legend.position = "none")+
+  theme_minimal()
+
+```  
+
+#### Map  
+```{r canopy_cover-map}
+# combined_df <- bind_rows(datasets_wgs, .id = "source_dataset") %>%
+#   filter(percent_tree_cover == 0)
+# 
+# leaflet(combined_df, width = "100%", height = 400) %>%
+#   addProviderTiles(providers$CartoDB.Positron) %>%
+#   setView(lng = -96, lat = 38, zoom = 4) %>%
+#   addCircleMarkers(
+#     lng = ~lon, lat = ~lat,
+#     radius = 7,
+#     fillColor = "#006d2c",
+#     fillOpacity = 0.85,
+#     color = "#006d2c", weight = 1,
+#     popup = ~glue::glue(
+#       "<b>Percent Tree Cover</b>",
+#       "<b>Tree Canopy:</b> {round(percent_tree_cover, 1)}%<br>",
+#       "<b>Final Risk Score:</b> {round(final_risk_score, 2)}"))
+  
+```
+
+
 ## Exposure Indicators {.tabset}
 
 ### Mean Ozone {.tabset}
@@ -950,31 +1063,49 @@ map_quantile_subset(datasets_wgs,
 
 #### Plot & Table
 
-```{r}
-# make_plot_df(datasets, 
-#              "traffic_proximity",
-#              order = c("Facilities", 
-#                        "Original", 
-#                        "1 km Thin", 
-#                        "5 km Thin")) %>% 
-#   ggplot(aes(x=value,
-#              y=data_source,
-#              fill=data_source))+
-#   geom_density_ridges2(jittered_points = TRUE, quantile_lines = TRUE, scale = 0.9, alpha = 0.7,
-#     vline_width = 1, vline_color = "red",
-#     point_size = 0.4, point_alpha = 1,
-#     position = position_raincloud(adjust_vlines = TRUE))+
-      # scale_x_continuous(transform = "log1p",
-                     # labels = comma)+
-#   labs(
-#     title = "Density Ridge Plots of Traffic Proximity",
-#     y = "Data Source",
-#     x = "Values"
-#   )+
-#   theme(legend.position = "none")+
-#   theme_minimal()
+```{r trafficProx}
+make_plot_df(datasets, 
+             "trafficProx",
+             order = c("Facilities", 
+                       "Original", 
+                       "1 km Thin", 
+                       "5 km Thin")) %>% 
+  summarize_distribution() %>% 
+  kbl(caption="Distribution of Traffic Proximity Across Datasources") %>% 
+  kable_styling(bootstrap_options = c("striped","hover"),full_width = FALSE)
+
+make_plot_df(datasets, 
+              "trafficProx",
+              order = c("Facilities", 
+                        "Original", 
+                        "1 km Thin", 
+                        "5 km Thin")) %>% 
+   ggplot(aes(x=value,
+              y=data_source,
+              fill=data_source))+
+   geom_density_ridges2(jittered_points = TRUE, quantile_lines = TRUE, scale = 0.9, alpha = 0.7,
+     vline_width = 1, vline_color = "red",
+     point_size = 0.4, point_alpha = 1,
+     position = position_raincloud(adjust_vlines = TRUE))+
+  scale_x_continuous(transform = "log1p",
+               labels = comma)+
+   labs(
+     title = "Density Ridge Plots of Traffic Proximity",
+     y = "Data Source",
+     x = "Values"
+   )+
+   theme(legend.position = "none")+
+   theme_minimal()
+```  
+#### Map  
+
+```{r trafficProx-map}
+map_quantile_subset(datasets_wgs,
+                    "trafficProx",
+                    quantile_thresh = 0.9)
 
 ```
+
 
 ------------------------------------------------------------------------
 
@@ -1133,7 +1264,7 @@ The intent of thinning is to mitigate the dependence/sharing that nearby points 
 
 ```{r correlation, cache = TRUE}
 #make sure all datasets are the on the same crs
-datasets_thinned <- datasets_wgs[c(2,3)] #look at only thinned 
+datasets_thinned <- datasets_wgs[c(2,3,4)] #look at only thinned & prisons 
 datasets_albers <- lapply(datasets_thinned, st_transform, crs = 3310)
 
 # Precompute coords once per dataset
