@@ -41,6 +41,9 @@ library(leaflet.extras)
 library(glue)
 library(htmltools)
 library(pgirmess)
+library(purrr)
+
+source("analysis/load_ca_samples.R")
 ```
 
 ------------------------------------------------------------------------
@@ -62,17 +65,11 @@ df_sf_all <- read_sf("outputs/comparison/final_df_all_2026-06-29.gpkg")
 
 n_all <- nrow(df_all)
 
-#read in 1km thin
-df_1km <- read_csv("outputs/comparison/final_df_1km_2026-06-29.csv", show_col_types = FALSE)
-
-df_sf_1km <- read_sf("outputs/comparison/final_df_1km_2026-06-29.gpkg")
+#read in 1 km and 5 km thinned samples
+thinned_samples <- load_ca_samples(return_type = "both")
+list2env(thinned_samples, envir = .GlobalEnv) #requires purrr package to be libraried
 
 n_1km <- nrow(df_1km)
-
-#read in 5km thin
-df_5km <- read_csv("outputs/comparison/final_df_5km_2026-06-29.csv", show_col_types = FALSE)
-
-df_sf_5km <- read_sf("outputs/comparison/final_df_5km_2026-06-29.gpkg")
 
 n_5km <- nrow(df_5km)
 
@@ -116,7 +113,7 @@ df_wgs_all <- df_sf_all %>%
   )
 
 #1km thin
-df_wgs_1km <- df_sf_1km %>% 
+df_wgs_1km <- df_1km_sf %>% 
   st_transform(4326) %>% 
   mutate(
     lon = st_coordinates(st_centroid(st_geometry(.)))[,1],
@@ -124,7 +121,7 @@ df_wgs_1km <- df_sf_1km %>%
   )
 
 #5km thin 
-df_wgs_5km <- df_sf_5km %>% 
+df_wgs_5km <- df_5km_sf %>% 
   st_transform(4326) %>% 
   mutate(
     lon = st_coordinates(st_centroid(st_geometry(.)))[,1],
