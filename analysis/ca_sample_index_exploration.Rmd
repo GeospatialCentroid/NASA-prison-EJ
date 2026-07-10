@@ -886,22 +886,81 @@ make_plot_df(datasets,
 
 #### Map  
 ```{r canopy_cover-map}
-# combined_df <- bind_rows(datasets_wgs, .id = "source_dataset") %>%
-#   filter(percent_tree_cover == 0)
-# 
-# leaflet(combined_df, width = "100%", height = 400) %>%
-#   addProviderTiles(providers$CartoDB.Positron) %>%
-#   setView(lng = -96, lat = 38, zoom = 4) %>%
-#   addCircleMarkers(
-#     lng = ~lon, lat = ~lat,
-#     radius = 7,
-#     fillColor = "#006d2c",
-#     fillOpacity = 0.85,
-#     color = "#006d2c", weight = 1,
-#     popup = ~glue::glue(
-#       "<b>Percent Tree Cover</b>",
-#       "<b>Tree Canopy:</b> {round(percent_tree_cover, 1)}%<br>",
-#       "<b>Final Risk Score:</b> {round(final_risk_score, 2)}"))
+
+# calculate how many points are exactly at threshold
+n_exceed_original   <- sum(datasets_wgs[["Original"]][["percent_tree_cover"]]   == 0, na.rm = TRUE)
+n_exceed_facilities <- sum(datasets_wgs[["Facilities"]][["percent_tree_cover"]] == 0, na.rm = TRUE)
+
+# subset each dataset
+subsets <- imap(datasets_wgs, function(df, name) {
+  df %>%
+    filter(.data[["percent_tree_cover"]] == 0) %>%
+    mutate(
+      .dataset = name,
+      .var_val = round(.data[["percent_tree_cover"]], 3)
+    )
+}) %>%
+  compact()
+
+original_vals <- datasets_wgs[["Original"]][["percent_tree_cover"]]
+
+# for colored rings
+palette_colors <- c(
+  "Original"   = "#E69F00",
+  "1 km Thin"  = "#56B4E9",
+  "5 km Thin"  = "#009E73",
+  "Facilities" = "#CC79A7"
+)
+
+# build base map
+base_map <- leaflet(width = "100%", height = 400) %>%
+  addProviderTiles(providers$CartoDB.Positron, group = "Positron (default)") %>%
+  addProviderTiles(providers$Esri.WorldImagery, group = "Satellite") %>%
+  setView(lng = -119.5, lat = 37.5, zoom = 6)
+
+# reduce over layers
+final_map <- Reduce(function(map, name) {
+  df    <- subsets[[name]]
+  color <- palette_colors[[name]] %||% "#999999"
+
+  map %>%
+    addCircleMarkers(
+      data        = df,
+      lng         = ~lon,
+      lat         = ~lat,
+      radius      = 7,
+      fillColor   = color,
+      fillOpacity = 0.85,
+      color       = color,
+      weight      = 1,
+      popup       = ~glue::glue(
+        "<b>{.dataset}</b><hr>",
+        "<b>Percent Tree Coverage:</b> {.var_val} %<br>",
+        "<b>Threshold:</b> 0%"
+      ),
+      group = name
+    )
+}, x = names(subsets), init = base_map)
+
+# Legend and title
+title_html <- htmltools::tags$div(
+  style = "background: white; padding: 4px 8px; border-radius: 4px;
+           box-shadow: 0 1px 4px rgba(0,0,0,0.3); font-size: 11px;
+           max-width: 280px; line-height: 1.6;",
+  HTML(glue::glue(
+    "<b>Percent Tree Cover</b> = 0% <br>
+     <b>Original sample:</b> {n_exceed_original} points exactly at threshold<br>
+     <b>Facilities:</b> {n_exceed_facilities} exactly at threshold<br>"
+  ))
+)
+
+final_map %>%
+  addLayersControl(
+    baseGroups    = c("Positron (default)", "Satellite"),
+    overlayGroups = names(subsets),
+    options       = layersControlOptions(collapsed = FALSE)
+  ) %>%
+  addControl(title_html, position = "bottomleft")
   
 ```
 
