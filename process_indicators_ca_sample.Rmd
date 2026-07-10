@@ -19,7 +19,7 @@ To avoid weird computing, I will compute indicators for all 5,000 points and cor
 
 There are 11 indicators in this code base. The majority of which are calculated in R, and have their own functions in the `R/` folder. Two indicators (canopy cover and heat exposure) are calculated via Google Earth Engine and have stand alone Python scripts in the 'python/' folder.
 
-Component scores will not be calculated for these data.
+Component scores will not be calculated for these data. Use the function `load_ca_samples` in the `analysis/` folder to return the thinned subsets. 
 
 First set up the environment with all required libraries via "setup.R" file, and load in data of interest.
 
@@ -201,7 +201,7 @@ rmp_prox <- read_csv("outputs/comparison/rmp_proximity_2026-06-01.csv")
 haz_prox <- read_csv("outputs/comparison/hazardous_waste_proximity_2026-06-01.csv")
 ```
 
-Next, let's combine into one data frame and save each subset as presented above.
+Next, let's combine into one data frame and save outputs. Again thinned subsets can be retrieved via the function `load_ca_samples` found in the `analysis/` folder
 
 ```{r}
 # combine into single data frame 
@@ -213,12 +213,6 @@ final_df <- list(ca_residences,
   #make object id a character
   mutate(object_id = as.character(object_id)) 
 
-#subset to thinned samples
-final_df_1km <- final_df %>% 
-  filter(object_id %in% thin_1km$object_id)
-
-final_df_5km <- final_df %>% 
-  filter(object_id %in% thin_5km$object_id)
 
 #save as csv and as shapefile for future analysis
 # entire sample:
@@ -227,19 +221,4 @@ final_df %>% st_as_sf() %>% write_sf(paste0("outputs/comparison/final_df_all_", 
 final_df %>%
   select(-geom) %>% 
   write_csv(paste0("outputs/comparison/final_df_all_", Sys.Date(), ".csv"))
-
-# 1km:
-final_df_1km %>% st_as_sf() %>% write_sf(paste0("outputs/comparison/final_df_1km_", Sys.Date(), ".gpkg"))
-
-final_df_1km %>%
-  select(-geom) %>% 
-  write_csv(paste0("outputs/comparison/final_df_1km_", Sys.Date(), ".csv"))
-
-# 5km: 
-final_df_5km %>% st_as_sf() %>% write_sf(paste0("outputs/comparison/final_df_5km_", Sys.Date(), ".gpkg"))
-
-final_df_5km %>%
-  select(-geom) %>% 
-  write_csv(paste0("outputs/comparison/final_df_5km_", Sys.Date(), ".csv"))
-
 ```
