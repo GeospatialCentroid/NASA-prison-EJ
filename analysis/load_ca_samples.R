@@ -1,5 +1,5 @@
 source("setup.R")
-
+library(purrr)
 ### this function pulls the 1 km and 5 km thinned points from the entire sample and returns the points as data frames
 
 load_ca_samples <- function(path = "outputs/comparison/final_df_all_2026-06-29.gpkg",
@@ -30,13 +30,13 @@ load_ca_samples <- function(path = "outputs/comparison/final_df_all_2026-06-29.g
     filter(object_id%in%thin_1km$object_id) %>% 
     st_as_sf()
   df_1km <- df_1km_sf %>% 
-    select(-geom)
+    st_drop_geometry()
   
   df_5km_sf <- final_df %>% 
     filter(object_id%in%thin_5km$object_id) %>% 
     st_as_sf()
   df_5km <- df_5km_sf %>% 
-    select(-geom)
+    st_drop_geometry()
     
   if(return_type == "csv"){
     return(list(df_1km = df_1km,
