@@ -199,6 +199,10 @@ npl_prox <- read_csv("outputs/comparison/npl_proximity_2026-06-01.csv")
 rmp_prox <- read_csv("outputs/comparison/rmp_proximity_2026-06-01.csv")
 
 haz_prox <- read_csv("outputs/comparison/hazardous_waste_proximity_2026-06-01.csv")
+
+# urban vs. rural 
+ca_urban_areas <- read_sf("data/scratch/tl_2020_us_uac20/tl_2020_us_uac20.shp") %>% 
+  filter(str_ends(NAME20, " CA")) 
 ```
 
 Next, let's combine into one data frame and save outputs. Again thinned subsets can be retrieved via the function `load_ca_samples` found in the `analysis/` folder
@@ -213,6 +217,9 @@ final_df <- list(ca_residences,
   #make object id a character
   mutate(object_id = as.character(object_id)) 
 
+# add urban vs rural to entire data set
+ca_urban_areas <- st_transform(ca_urban_areas,crs = crs(final_df))
+final_df$urban <- lengths(st_intersects(final_df,ca_urban_areas))>0 
 
 #save as csv and as shapefile for future analysis
 # entire sample:
