@@ -2,7 +2,7 @@ source("setup.R")
 library(purrr)
 ### this function pulls the 1 km and 5 km thinned points from the entire sample and returns the points as data frames
 
-load_ca_samples <- function(path = "outputs/comparison/final_df_all_2026-06-29.gpkg",
+load_ca_samples <- function(path = "outputs/comparison/final_df_all_2026-07-21.gpkg",
                             return_type = "csv"){
   
   #check condition on return type
