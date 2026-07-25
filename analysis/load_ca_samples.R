@@ -1,6 +1,35 @@
 source("setup.R")
 library(purrr)
-### this function pulls the 1 km and 5 km thinned points from the entire sample and returns the points as data frames
+#' Load thinned CA sample points
+#'
+#' Loads the full sample of California residence points and filters it down
+#' to the two spatially thinned subsets (1 km and 5 km minimum spacing),
+#' returning each subset as a plain data frame, an sf object, or both.
+#'
+#' @param path Character. Path to the full sample dataset. Must have a
+#'   `.csv` or `.gpkg` extension. Defaults to
+#'   `"outputs/comparison/final_df_all_2026-07-21.gpkg"`.
+#' @param return_type Character. One of `"csv"`, `"gpkg"`, or `"both"`.
+#'   Controls which version(s) of the filtered data are returned:
+#'   \itemize{
+#'     \item `"csv"` — plain data frames with geometry dropped
+#'     \item `"gpkg"` — sf objects with geometry retained
+#'     \item `"both"` — all four (data frame + sf object for each thinning level)
+#'   }
+#'
+#' @return A named list. Contents depend on `return_type`:
+#'   \itemize{
+#'     \item `"csv"`: `df_1km`, `df_5km`
+#'     \item `"gpkg"`: `df_1km_sf`, `df_5km_sf`
+#'     \item `"both"`: `df_1km`, `df_1km_sf`, `df_5km`, `df_5km_sf`
+#'   }
+#'
+#' @details Requires two pre-existing thinned reference files on disk:
+#'   `data/ca_sample/1km_ca_residences.gpkg` and
+#'   `data/ca_sample/5km_ca_residences.gpkg`. These provide the `object_id`
+#'   values used to subset `final_df` down to the thinned points — the
+#'   thinning itself is not performed here, only the filtering/join
+
 
 load_ca_samples <- function(path = "outputs/comparison/final_df_all_2026-07-21.gpkg",
                             return_type = "csv"){
