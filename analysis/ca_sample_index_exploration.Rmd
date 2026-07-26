@@ -94,7 +94,6 @@ datasets <- list(
 
 
 #-----Column groupings-----------------------------------------------------
-#come back and add lst_avg, percent_tree_cover, and trafficProx. 
 raw_climate  <- c("flood_risk_percent", "wildfire_risk","lst_avg","percent_tree_cover")
 raw_exposure <- c("mean_ozone", "avg_pm25",
                   "pesticide_mean_kg","trafficProx")
