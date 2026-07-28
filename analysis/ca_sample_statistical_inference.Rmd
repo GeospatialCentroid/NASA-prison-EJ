@@ -82,7 +82,7 @@ To determine if the environmental hazard indicators for Californian state and fe
 
 Hence, it is of interest to find a more consistent comparison data source in terms of spatial area to the carceral facilities of interest, such as a neighborhood level data source for California. Unfortunately, despite the geospatial data capabilities of California, there is not a data set available for the entire state of California. Furthermore, there is not a universal definition of a neighborhood that is recorded by either the federal or Californian state governments. Note, many Californian cities do seem to have a neighborhood delination, such as LA's LA Times neighborhood data, "Mapping L.A. Boundaries" (<https://maps.latimes.com/about/index.html>), but there is no data set that does something similar for every city and town in California.
 
-Thus, to make comparisons to carceral facilities, we will build our own comparison data set by randomly sampling centroids/hubs where Californians live from Meta's HRSL population density raster file. This raster file is part of Meta's "AI for good" initiative, and provides a 30 meter resolution raster file with population estimates calculated via building estimates (<https://ai.meta.com/ai-for-good/datasets/high-resolution-population-density-maps/>). Before sampling locations, we will aggregate the cells of the raster file with a factor of 10, round values to their nearest integer, and remove all 0's to avoid sampling areas of the state that aren't inhabited. This raster is mapped in Figure \@ref(fig:raster-plot) with population values highlighted.
+Thus, to make comparisons to carceral facilities, we will build our own comparison data set by randomly sampling centroids/hubs where Californians live from Meta's HRSL population density raster file. This raster file is part of Meta's "AI for good" initiative, and provides a 30 meter resolution raster file with population estimates calculated via building estimates (<https://ai.meta.com/ai-for-good/datasets/high-resolution-population-density-maps/>). Before sampling locations, we will aggregate the cells of the raster file with a factor of 10, round values to their nearest integer, and remove all 0's to avoid sampling areas of the state that aren't inhabited. This raster is mapped in figure \@ref(fig:raster-plot) with population values highlighted.
 
 ```{r raster-plot, fig.cap= "Meta's HRSL population density raster file plotted with aggregation factor 60 for visualization purposes"}
 
@@ -139,7 +139,7 @@ dens_map
 
 Next, we will consider each non-zero value cell of the aggregated raster file as a likely candidate. Initially, let each cell be pulled with probability $P_{i,j} = \frac{\text{(population value)}_{i,j}}{\sum_{i,j}(\text{population value}_{i,j})}$. Visually, this sampling suggests that areas with a lighter shade are more likely to be selected than areas that are darker. This sampling scheme ensures that locations are selected where most Californian's reside as high population areas are more likely to be sampled. Note, points will be drawn without replacement to avoid duplicate locations. We will draw $n=5,000$ points in this manner.
 
-Because this sampling procedure doesn't provide a regularity/minimum distance between points, the sampled locations are more likely to clump in high-population density locations. To attempt to minimize spatial autocorrelation, we will apply a 1 km and 5 km thinning to the sample. This thinning ensures that each point is at least 1 km or 5 km from each nearby points and from each prison. For further analysis, both samples will be considered as a sensitivity analysis. The 1 km and 5 km thins were drawn with seed 513 and have `r nrow(df_1km_sf)`, `r nrow(df_5km_sf)` observations, respectively.
+Because this sampling procedure doesn't provide a regularity/minimum distance between points, the sampled locations are more likely to clump in high-population density locations. To attempt to minimize spatial autocorrelation, we will apply a 1 km and 5 km thinning to the sample. This thinning ensures that each point is at least 1 km or 5 km from each nearby points and from each prison. For further analysis, both samples will be considered as a sensitivity analysis. The 1 km and 5 km thins were drawn with seed 513 and have `r nrow(df_1km_sf)`, `r nrow(df_5km_sf)` observations, respectively. This thinning scheme can be seen in figure \@ref(fig:sampled_points_plots).
 
 Next, to match the median square footage of the carceral facilities, we will apply a buffer to each sampled and thinned point of with a radius of 140.4 m (to match the median square footage of the prisons). Environmental harm indicators will then be run on these buffered points using CSU's Geospatial Centroid's environmental justice code base.
 
@@ -226,9 +226,9 @@ combined_plots
   
 ```
 
-### Urban vs. Rural Stratification   
+### Urban vs. Rural Stratification
 
-Next, it is of interest to know which points in our drawn sample are delineated as urban or rural. To define urban and rural we will utilize the US Census's 2020 Urban Areas shape file filtered to California as the locations are marked are using the census's new definition of urban. If one of our sampled points and prisons intersects with one of the polygons, we will mark the point as urban, if a point does not intersect, we will call it rural. This scheme is mapped below--blue points are points that intersect an urban area, while green points don't and are marked as rural. 
+Next, it is of interest to know which points in our drawn sample are delineated as urban or rural. To define urban and rural we will utilize the US Census's 2020 Urban Areas shape file filtered to California as the locations are marked are using the census's new definition of urban. If one of our sampled points and prisons intersects with one of the polygons, we will mark the point as urban, if a point does not intersect, we will call it rural. This scheme is mapped below--blue points are points that intersect an urban area, while green points don't and are marked as rural.
 
 ```{r urban_v_rural_demographics}
 # #check crs
@@ -340,9 +340,10 @@ $$
 
 ## Results
 
-### Global test 
+### Global test
 
-#### Before Stratification  
+#### Before Stratification
+
 The global bootstrap test indicated a statistically significant difference between residential and prison environmental hazard indicators for the 1 km thinned sample ($n = 3186$, observed statistic $=1.814$, $p = 0.004$), providing evidence at $\alpha = 0.05$ that Californian prisons face worse environmental hazard conditions than residential areas overall. The 5 km thinned sample did not reach significance ($n = 770$, observed statistic = $0.606$, $p= 0.143$). This discrepancy suggests the signal detected in the 1 km sample may be sensitive to the degree of spatial thinning applied — a coarser thin reduces sample size substantially (from 3186 to 770 points) and may attenuate the ability to detect a difference, or alternatively, the association between prison locations and worse indicators may be more localized than a 5 km separation preserves.
 
 ```{r global_tests}
@@ -415,7 +416,8 @@ mult_combined_plots <- (u_1 | u_5)+
 mult_combined_plots
 ```
 
-#### With Stratification  
+#### With Stratification
+
 Stratifying by urbanicity showed that the significant global result is concentrated in urban locations. The 1 km urban stratum remained significant ($n= 2932$, observed statistic $=1.126$, $p = 0.006$), while the 1 km rural stratum did not ($n = 254$, observed statistic $=0.382$,$p=0.394$). Neither the 5 km urban stratum ($n = 573$, observed statistic $= 0.782$,$p = 0.169$) nor the rural stratum ($n = 197$, observed statistic $= 0.364$, $p=0.357$) reached significance. Taken together, the evidence for worse environmental hazard indicators near prisons relative to residences is strongest — and only significant — among urban locations sampled at the 1 km thinning distance.
 
 ```{r global-urban-v-rural, warning = FALSE, message=FALSE}
@@ -556,6 +558,7 @@ mult_combined_plots_uvr
 ```
 
 ### Individual Results
+
 Because the eleven environmental hazard indicators are not independent of one another, the indicator-level bootstrap tests are presented here as exploratory analyses intended to characterize which indicators may be contributing to the significant global results above, rather than as independent confirmatory hypothesis tests in their own right.
 
 In the unstratified 1 km sample, three of eleven indicators remained significant after Benjamini–Hochberg correction: flood risk percent (adj. $p = 0.004$), wildfire risk (adj. $p=0.004$), and mean pesticide application (adj. $p=0.004$). All three showed positive observed statistics, indicating that residential areas fared better than prisons on these specific indicators — consistent with the direction of the significant global result. The remaining eight indicators did not remain significant after adjustment.
@@ -563,6 +566,7 @@ In the unstratified 1 km sample, three of eleven indicators remained significant
 Within the 1 km urban stratum — the subgroup driving the significant stratified global result — six of eleven indicators remained significant after correction: flood risk percent, land surface temperature, inverse percent tree cover, mean ozone, mean pesticide application, and proximity to National Priorities List sites (all adj. $p<.002$). As with the unstratified result, all six showed positive observed statistics, again indicating residential areas fared better than prisons on these indicators. Wildfire risk, average PM2.5, traffic proximity, RMP facility proximity, and hazardous waste facility proximity did not remain significant after adjustment.
 
 Full indicator-level results for all six sample/stratification combinations — including the non-significant 5 km, 1 km rural, 5 km urban, and 5 km rural strata — are provided in the accompanying tables for reference.
+
 ```{r individual-tests}
 #before stratification
 indv_test_1km <- mean_bootstrap(1234, 1000, test_data_1km)
@@ -618,14 +622,16 @@ build_table(indv_test_5km_rural,
 ```
 
 ## Conclusion
+
 This analysis found evidence at $\alpha = 0.05$ that Californian state and federal prisons exhibit worse environmental hazard indicators than sampled residential areas, but only under specific sampling conditions. The global test was significant for the 1 km thinned sample overall ($p=.004$) and, when stratified, remained significant specifically within the urban stratum ($p=0.006$). The 5 km thinned sample did not reach significance, either overall or within either urbanicity stratum, nor did the 1 km rural stratum. Indicator-level exploratory results in the significant strata pointed most consistently to flood risk percent, mean pesticide application, and — in the urban stratum specifically — land surface temperature, inverse tree cover, mean ozone, and NPL proximity as indicators where residential areas fared better than prisons, though these should be interpreted descriptively given the non-independence of indicators noted in the Methods.
 
 Notably, significance depended on thinning distance: the 1 km thin detected a global difference while the 5 km thin did not, despite testing the same underlying population of prisons. This may reflect reduced statistical power at the coarser thin, where sample size dropped substantially (from 3186 to 770 points). Alternatively, it may indicate that the relationship between prison siting and environmental hazard is more spatially localized than a 5 km separation preserves. The present data cannot distinguish between these two explanations, and this sensitivity should be treated as an open methodological question rather than a resolved one.
 
 Several limitations bound the scope of these conclusions. First, the eleven environmental indicators are not independent, so the indicator-level tests reported here are exploratory rather than confirmatory; they should be read as suggestive of which indicators may contribute to the overall global result, not as standalone findings. Second, because this analysis includes the full available population of Californian state and federal prisons rather than a sample, prison-level means are treated as fixed reference values; inference is limited to characterizing how sampled residential locations compare to this fixed population, not to generalizing about prisons beyond those observed. Third, because no standard, statewide definition of a "residential neighborhood" exists in available Californian data, the residential comparison group was constructed via population-weighted sampling and buffering rather than drawn from an established administrative unit; results are conditional on this sampling design. Fourth, indicators with missing values (flood risk percent, land surface temperature, and average pesticide yield, in particular) were dropped rather than imputed; if the mechanisms producing these missing values are related to the indicators of interest, this could introduce bias not accounted for here. Finally, the rural strata were considerably smaller than the urban strata (1 km rural: $n = 254$; 5 km rural: $n = 197$), and the lack of significance in these groups may reflect limited statistical power rather than a true absence of difference.
 
-Taken together, these results indicate that Californian prisons show worse environmental hazard indicators than residential areas under some, but not all, sampling conditions examined — most consistently in urban locations at finer spatial resolution.  
+Taken together, these results indicate that Californian prisons show worse environmental hazard indicators than residential areas under some, but not all, sampling conditions examined — most consistently in urban locations at finer spatial resolution.
 
-## Appendix Code  
+## Appendix Code
+
 ```{r ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
 ```
