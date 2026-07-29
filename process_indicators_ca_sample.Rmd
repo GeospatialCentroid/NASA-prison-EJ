@@ -201,7 +201,7 @@ rmp_prox <- read_csv("outputs/comparison/rmp_proximity_2026-06-01.csv")
 haz_prox <- read_csv("outputs/comparison/hazardous_waste_proximity_2026-06-01.csv")
 
 # urban vs. rural 
-ca_urban_areas <- read_sf("data/scratch/tl_2020_us_uac20/tl_2020_us_uac20.shp") %>% 
+ca_urban_areas <- read_sf("data/ca_sample/tl_2020_us_uac20/tl_2020_us_uac20.shp") %>% 
   filter(str_ends(NAME20, " CA")) 
 ```
 

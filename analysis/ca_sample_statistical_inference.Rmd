@@ -66,7 +66,7 @@ ca_prisons_sf <- read_sf("outputs/final_df_2026-04-29.gpkg") %>%
 ca_counties <- tigris::counties(state = "CA",
                                 cb=TRUE)
 #read in california urban areas 
-ca_urban_areas <- read_sf("data/scratch/tl_2020_us_uac20/tl_2020_us_uac20.shp") %>% 
+ca_urban_areas <- read_sf("data/ca_sample/tl_2020_us_uac20/tl_2020_us_uac20.shp") %>% 
   filter(str_ends(NAME20, " CA")) 
 ```
 
@@ -87,7 +87,7 @@ Thus, to make comparisons to carceral facilities, we will build our own comparis
 ```{r raster-plot, fig.cap= "Meta's HRSL population density raster file plotted with aggregation factor 60 for visualization purposes"}
 
 #read in raster
-ca_pop_raster <- rast("data/phase2/raw/population/ca_30m_pop_density_hrsl_2020.tif")
+ca_pop_raster <- rast("data/ca_sample/population/ca_30m_pop_density_hrsl_2020.tif")
 #aggregate first, then round
 pop_aggregate_60 <- ca_pop_raster %>% 
   terra::aggregate(fact = 60, 
