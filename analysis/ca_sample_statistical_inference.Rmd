@@ -112,7 +112,7 @@ make_map <- function(raster, title_label) {
     ) +
     geom_spatraster(data = raster) +
     scale_fill_viridis_c(
-      name     = "**Population**<br><span style='color:grey60;font-size:8pt'>30m² cell sum</span>",
+      name     = "**Population**<br><span style='color:grey60;font-size:8pt'>30m<sup>2</sup> cell sum</span>",
       na.value = NA,
       trans    = "log10",
       option   = "viridis"
@@ -216,14 +216,14 @@ map_points <- function(points_df, title_text){
 all <- map_points(df_wgs_all, "Entire Sample")
 thin_1km <- map_points(df_wgs_1km, "1 km Thinned Sample")  
 thin_5km <- map_points(df_wgs_5km, "5 km Thinned Sample")
+prisons <- map_points(ca_prisons_wgs, "California Prisons")
 
-combined_plots <- (all | thin_1km | thin_5km)+
+combined_plots <- (all | thin_1km | thin_5km | prisons)+
   plot_layout(guides = "collect") +
-  plot_annotation(title = "Population Weighted Sampling with 1 km and 5 km Thins") &
+  plot_annotation(title = "Population Weighted Sampling with 1 km and 5 km Thins and California Prisons") &
   theme(legend.position = "bottom")
 
 combined_plots
-  
 ```
 
 ### Urban vs. Rural Stratification
@@ -567,7 +567,7 @@ Within the 1 km urban stratum — the subgroup driving the significant stratifie
 
 Full indicator-level results for all six sample/stratification combinations — including the non-significant 5 km, 1 km rural, 5 km urban, and 5 km rural strata — are provided in the accompanying tables for reference.
 
-```{r individual-tests}
+```{r individual-tests-1km}
 #before stratification
 indv_test_1km <- mean_bootstrap(1234, 1000, test_data_1km)
 indv_test_5km <- mean_bootstrap(1234, 1000, test_data_5km)
@@ -597,9 +597,16 @@ build_table <- function(test_list, title_string){
 
 build_table(indv_test_1km,
             "1km Thinned Sample Individual Indicator Exploratory Test Results")
+```
+
+
+```{r individual-tests-5km}
 build_table(indv_test_5km,
             "5km Thinned Sample Individual Indicator Exploratory Test Results")
- 
+```
+
+
+```{r individual-tests-1km-urban}
 #urban vs rural
 #1km
 indv_test_1km_urban <- mean_bootstrap(1234, 1000, test_data_1km_urban)
@@ -607,15 +614,26 @@ indv_test_1km_rural <- mean_bootstrap(1234, 1000, test_data_1km_rural)
 #1km tables
 build_table(indv_test_1km_urban,
             "1km Thinned Urban Sample Individual Indicator Exploratory Test Results")
+```
+
+
+```{r individual-tests-1km-rural}
 build_table(indv_test_1km_rural,
             "1km Thinned Rural Sample Individual Indicator Exploratory Test")
+```
 
+
+```{r individual-tests-5km-urban}
 #5km
 indv_test_5km_urban <- mean_bootstrap(1234, 1000, test_data_5km_urban)
 indv_test_5km_rural <- mean_bootstrap(1234, 1000, test_data_5km_rural)
 #5km tables
 build_table(indv_test_5km_urban,
             "5km Thinned Urban Sample Individual Indicator Exploratory Test Results")
+```
+
+
+```{r individual-tests-5km-rural}
 build_table(indv_test_5km_rural,
             "5km Thinned Rural Sample Individual Indicator Exploratory Test Results")
 
@@ -631,7 +649,66 @@ Several limitations bound the scope of these conclusions. First, the eleven envi
 
 Taken together, these results indicate that Californian prisons show worse environmental hazard indicators than residential areas under some, but not all, sampling conditions examined — most consistently in urban locations at finer spatial resolution.
 
+\newpage 
 ## Appendix Code
 
+### Urban and Rural CA Prisons  
+```{r urban_rural_prison_delination}
+#redo urban vs rural prisons to include info about prisons
+#read in prison shape file again
+ca_prisons_sf <- read_sf("outputs/final_df_2026-04-29.gpkg") %>% 
+  filter(STATE == "CA")
+ca_urban_areas <- st_transform(ca_urban_areas,crs = crs(df_sf_all))
+ca_prisons_sf <- st_transform(ca_prisons_sf,crs=crs(df_sf_all))
+
+#add urban column to prisons using Urban Area Delineation
+ca_prisons_sf$urban <- lengths(st_intersects(ca_prisons_sf,ca_urban_areas))>0
+
+urban_ca_prisons <- ca_prisons_sf %>% 
+  filter(urban==TRUE) %>% 
+  select(FACILITYID,
+         OBJECTID,
+         NAME,
+         ADDRESS,
+         CITY,
+         STATE,
+         ZIP,
+         TYPE) %>% 
+  mutate(COMBINED_ADDRESS = paste0(ADDRESS," ",CITY,", ",STATE," ",ZIP)) %>% 
+  st_drop_geometry()
+
+rural_ca_prisons <- ca_prisons_sf %>% 
+  filter(urban == FALSE) %>% 
+  select(FACILITYID,
+         OBJECTID,
+         NAME,
+         ADDRESS,
+         CITY,
+         STATE,
+         ZIP,
+         TYPE) %>% 
+  mutate(COMBINED_ADDRESS = paste0(ADDRESS," ",CITY,", ",STATE," ",ZIP)) %>% 
+  st_drop_geometry()
+```
+
+```{r urban_rural_prison_delination-urban-table}
+#build tables
+urban_ca_prisons %>% 
+  select(FACILITYID,
+         OBJECTID,
+         COMBINED_ADDRESS,
+         TYPE) %>% 
+  kable(caption = "Urban Californian Prison Meta Data",
+      col.names = c("Facility ID", "Object Id", "Full Address", "Facility Type"))
+
+rural_ca_prisons %>% 
+  select(FACILITYID,OBJECTID,
+         COMBINED_ADDRESS,
+         TYPE) %>% 
+  kable(caption = "Rural Californian Prison Meta Data",
+      col.names = c("Facility ID", "Object Id", "Full Address", "Facility Type"))
+  
+```
+### Reference Code  
 ```{r ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
 ```
