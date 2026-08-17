@@ -77,9 +77,9 @@ As a preliminary search, we are interested in determining if there is evidence a
 
 ### Sampling and Thinning
 
-To determine if the environmental hazard indicators for Californian state and federal prisons are indeed worse than residential areas, we must first determine how to sample Californian residential areas. We started by considering census block groups, but because the geographic boundaries for census block groups are determined by the number of individuals residing in the block group, block groups tend to be large in surface area for rural areas, and small for urban areas. This inconsistent sizing makes comparison to carceral facilities difficult, particularly when carceral facilities have a median surface area that's approximately $0.062 \text{ km}^2$.
+To determine if the environmental hazard indicators for Californian state and federal prisons are indeed worse than residential areas, we must first determine how to sample Californian residential areas. We started by considering census block groups, but because the geographic boundaries for census block groups are determined by the number of individuals residing in the block group, block groups tend to be large in surface area for rural areas and small for urban areas. This inconsistent sizing makes comparison to carceral facilities difficult, particularly when carceral facilities have a median surface area that's approximately $0.062 \text{ km}^2$.
 
-Hence, it is of interest to find a more consistent comparison data source in terms of spatial area to the carceral facilities of interest, such as a neighborhood level data source for California. Unfortunately, despite the geospatial data capabilities of California, there is not a data set available for the entire state of California. Furthermore, there is not a universal definition of a neighborhood that is recorded by either the federal or Californian state governments. Note, many Californian cities do seem to have a neighborhood delination, such as LA's LA Times neighborhood data, "Mapping L.A. Boundaries" (<https://maps.latimes.com/about/index.html>), but there is no data set that does something similar for every city and town in California.
+Hence, it is of interest to find a more consistent comparison data source in terms of spatial area to the carceral facilities of interest, such as a neighborhood level data source for California. Unfortunately, despite the geospatial data capabilities of California, there is not a data set available for the entire state of California. Furthermore, there is not a universal definition of a neighborhood that is recorded by either the federal or Californian state governments. Note, many Californian cities do seem to have a neighborhood delineation, such as LA's LA Times neighborhood data, "Mapping L.A. Boundaries" (<https://maps.latimes.com/about/index.html>), but there is no data set that does something similar for every city and town in California.
 
 Thus, to make comparisons to carceral facilities, we will build our own comparison data set by randomly sampling centroids/hubs where Californians live from Meta's HRSL population density raster file. This raster file is part of Meta's "AI for good" initiative, and provides a 30 meter resolution raster file with population estimates calculated via building estimates (<https://ai.meta.com/ai-for-good/datasets/high-resolution-population-density-maps/>). Before sampling locations, we will aggregate the cells of the raster file with a factor of 10, round values to their nearest integer, and remove all 0's to avoid sampling areas of the state that aren't inhabited. This raster is mapped in figure \@ref(fig:raster-plot) with population values highlighted.
 
@@ -138,7 +138,7 @@ dens_map
 
 Next, we will consider each non-zero value cell of the aggregated raster file as a likely candidate. Initially, let each cell be pulled with probability $P_{i,j} = \frac{\text{(population value)}_{i,j}}{\sum_{i,j}(\text{population value}_{i,j})}$. Visually, this sampling suggests that areas with a lighter shade are more likely to be selected than areas that are darker. This sampling scheme ensures that locations are selected where most Californian's reside as high population areas are more likely to be sampled. Note, points will be drawn without replacement to avoid duplicate locations. We will draw $n=5,000$ points in this manner.
 
-Because this sampling procedure doesn't provide a regularity/minimum distance between points, the sampled locations are more likely to clump in high-population density locations. To attempt to minimize spatial autocorrelation, we will apply a 1 km and 5 km thinning to the sample. This thinning ensures that each point is at least 1 km or 5 km from each nearby points and from each prison. For further analysis, both samples will be considered as a sensitivity analysis. The 1 km and 5 km thins were drawn with seed 513 and have `r nrow(df_1km_sf)`, `r nrow(df_5km_sf)` observations, respectively. This thinning scheme can be seen in figure \@ref(fig:sampled_points_plots).
+Because this sampling procedure doesn't provide a regularity/minimum distance between points, the sampled locations are more likely to clump in high-population density locations. To attempt to minimize spatial autocorrelation, we will apply a 1 km and 5 km thinning to the sample. This thinning ensures that each point is at least 1 km or 5 km from each nearby points and from each prison. For further analysis, both samples will be considered as a sensitivity analysis. The 1 km and 5 km thins were drawn with seed 513 and have `r nrow(df_1km_sf)`, `r nrow(df_5km_sf)` observations, respectively (before `NA`'s are dropped). This thinning scheme can be seen in figure \@ref(fig:sampled_points_plots).
 
 It is worth noting that spatial thinning is not the only approach available for addressing spatial autocorrelation. An alternative strategy would be to fit a spatial model — for example, one that explicitly incorporates a spatial covariance or autocorrelation structure — using the full, un-thinned sample rather than discarding points to approximate independence. Such an approach would retain more of the sampled data and could directly model spatial dependence rather than attempting to reduce it through subsampling. We opted for thinning in this analysis for its relative simplicity and interpretability, but a spatial modeling approach remains a reasonable direction for future work.
 
@@ -230,8 +230,15 @@ combined_plots
 To assess whether thinning meaningfully reduced spatial autocorrelation, we will will compute spatial correlograms for each indicator (Moran's I across 10 km distance bins via `ncf::correlog`) for the 1 km thin, 5 km thin, and prison locations. The two thins showed similar correlation decay for most indicators, suggesting 5 km offered little improvement over 1 km. Note, this is a descriptive comparison, as no formal significance testing was applied. Given this, as a team we prefer the 1 km thin as it retains a much larger sample while preserving urban representation, whereas the 5 km thin disproportionately drops urban points, making urban and rural samples appear oddly similar for a state as spatially heterogeneous as California. (In other words, as shown below the in the 5 km thin, the number of urban and rural points are almost identical, while almost 95% of the residents of California live in an urban area.) We therefore used the 1 km thin as our primary sample, keeping the 5 km thin as a sensitivity check.
 
 ```{r spatial-correleogram, cache = TRUE, eval = FALSE}
+raw_all <- c("flood_risk_percent", "wildfire_risk","lst_avg", 
+             "percent_tree_cover", "mean_ozone", "avg_pm25",
+             "pesticide_mean_kg","trafficProx", "npl_prox", 
+             "rmp_prox", "haz_prox")
+
 #make sure all datasets are the on the same crs
-datasets_thinned <- list(df_1km_sf, df_5km_sf,ca_prisons_sf)
+datasets_thinned <- list(df_1km_sf = df_1km_sf,
+                         df_5km_sf=df_5km_sf,
+                         ca_prisons_sf=ca_prisons_sf)
 datasets_albers <- lapply(datasets_thinned, st_transform, crs = 3310)
 
 # Precompute coords once per dataset
@@ -239,12 +246,8 @@ coords_list <- lapply(datasets_albers, function(sf_obj) {
   st_coordinates(st_centroid(sf_obj))
 })
 
-all_corr <- map_dfr(c("flood_risk_percent", "wildfire_risk",
-                      "lst_avg","percent_tree_cover",
-                      "mean_ozone","avg_pm25",
-                      "pesticide_mean_kg","trafficProx",
-                      "npl_prox", "rmp_prox",
-                      "haz_prox"), function(var){
+all_corr <- map_dfr(raw_all, 
+                    function(var){
   map_dfr(names(datasets_albers), function(dataset){
     sf_obj <- datasets_albers[[dataset]]
     coords <- coords_list[[dataset]]
