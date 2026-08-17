@@ -277,7 +277,7 @@ all_corr %>% ggplot(aes(x = mean.of.class / 1000, y = correlation, color = datas
 
 ### Urban vs. Rural Stratification
 
-Next, it is of interest to know which points in our drawn sample are delineated as urban or rural. To define urban and rural we will utilize the US Census's 2020 Urban Areas shape file filtered to California as the locations are marked are using the census's new definition of urban. If one of our sampled points and prisons intersects with one of the polygons, we will mark the point as urban, if a point does not intersect, we will call it rural. This scheme is mapped below--blue points are points that intersect an urban area, while green points don't and are marked as rural.
+Next, it is of interest to know which points in our drawn sample are delineated as urban or rural. To define urban and rural we will utilize the US Census's 2020 Urban Areas shape file filtered to California as the locations are marked are using the census's new definition of urban (https://www.census.gov/programs-surveys/geography/guidance/geo-areas/urban-rural.html). If one of our sampled points and prisons intersects with one of the polygons, we will mark the point as urban, if a point does not intersect, we will call it rural. This scheme is mapped below--blue points are points that intersect an urban area, while green points don't and are marked as rural.
 
 ```{r urban_v_rural_demographics}
 # #check crs
