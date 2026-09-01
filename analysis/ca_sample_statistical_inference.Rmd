@@ -1,0 +1,806 @@
+---
+title: "Californian Residential Area Statistical Inference"
+author: "Jackson Phippen"
+date: "`r Sys.Date()`"
+output: bookdown::word_document2
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(
+  echo       = FALSE,
+  warning    = FALSE,
+  message    = FALSE,
+  fig.width  = 9,
+  fig.height = 5,
+  dpi        = 150,
+  out.width  = "100%" 
+)
+```
+
+```{r packages, message=FALSE, warning=FALSE, include=FALSE}
+library(tidyterra)
+library(ggtext)
+library(patchwork)
+library(knitr)
+library(kableExtra)
+source("setup.R")
+source("analysis/bootstrap_code.R")
+```
+
+```{r load-data, message = FALSE, results='hide'}
+#load in all points
+df_sf_all <- read_sf("outputs/comparison/final_df_all_2026-07-21.gpkg")
+
+source("analysis/load_ca_samples.R")
+#load in all thinned data as sf objects and just dataframes
+list2env(load_ca_samples(return_type = "both"), envir = .GlobalEnv)
+
+#remove NA's
+df_1km <- df_1km %>% 
+  filter(if_all(everything(),~!is.na(.)))
+
+df_5km <- df_5km %>% 
+  filter(if_all(everything(),~!is.na(.)))
+
+#load in CA facilities. 
+ca_prisons <- read_csv("outputs/final_df_2026-04-29.csv", show_col_types = FALSE) %>% 
+  filter(STATE == "CA") %>% 
+  mutate(flood_risk_percent = flood_risk,
+         inv_percent_tree_cover = 100 - percent_tree_cover) %>% 
+  filter(if_all(everything(),~!is.na(.))) %>% 
+  select(c(flood_risk_percent, wildfire_risk, lst_avg, percent_tree_cover,
+           inv_percent_tree_cover, mean_ozone, avg_pm25, pesticide_mean_kg, 
+           trafficProx, npl_prox, rmp_prox, haz_prox))
+
+ca_prisons_sf <- read_sf("outputs/final_df_2026-04-29.gpkg") %>% 
+  filter(STATE == "CA") %>% 
+  mutate(flood_risk_percent = flood_risk,
+         inv_percent_tree_cover = 100 - percent_tree_cover) %>% 
+  filter(if_all(everything(),~!is.na(.))) %>% 
+  select(c(flood_risk_percent, wildfire_risk, lst_avg, percent_tree_cover,
+           inv_percent_tree_cover, mean_ozone, avg_pm25, pesticide_mean_kg, 
+           trafficProx, npl_prox, rmp_prox, haz_prox))
+
+#read in california county boundaries to add context
+ca_counties <- tigris::counties(state = "CA",
+                                cb=TRUE)
+#read in california urban areas 
+ca_urban_areas <- read_sf("data/ca_sample/tl_2020_us_uac20/tl_2020_us_uac20.shp") %>% 
+  filter(str_ends(NAME20, " CA")) 
+```
+
+## Research Question
+
+As a preliminary search, we are interested in determining if there is evidence at $\alpha = 0.05$ to suggest that the environmental hazard indicators for Californian state and federal prisons are worse than Californian residential areas.
+
+## Methods
+
+### Sampling and Thinning
+
+To determine if the environmental hazard indicators for Californian state and federal prisons are indeed worse than residential areas, we must first determine how to sample Californian residential areas. We started by considering census block groups, but because the geographic boundaries for census block groups are determined by the number of individuals residing in the block group, block groups tend to be large in surface area for rural areas and small for urban areas. This inconsistent sizing makes comparison to carceral facilities difficult, particularly when carceral facilities have a median surface area that's approximately $0.062 \text{ km}^2$.
+
+Hence, it is of interest to find a more consistent comparison data source in terms of spatial area to the carceral facilities of interest, such as a neighborhood level data source for California. Unfortunately, despite the geospatial data capabilities of California, there is not a data set available for the entire state of California. Furthermore, there is not a universal definition of a neighborhood that is recorded by either the federal or Californian state governments. Note, many Californian cities do seem to have a neighborhood delineation, such as LA's LA Times neighborhood data, "Mapping L.A. Boundaries" (<https://maps.latimes.com/about/index.html>), but there is no data set that does something similar for every city and town in California.
+
+Thus, to make comparisons to carceral facilities, we will build our own comparison data set by randomly sampling centroids/hubs where Californians live from Meta's HRSL population density raster file. This raster file is part of Meta's "AI for good" initiative, and provides a 30 meter resolution raster file with population estimates calculated via building estimates (<https://ai.meta.com/ai-for-good/datasets/high-resolution-population-density-maps/>). Before sampling locations, we will aggregate the cells of the raster file with a factor of 10, round values to their nearest integer, and remove all 0's to avoid sampling areas of the state that aren't inhabited. This raster is mapped in figure \@ref(fig:raster-plot) with population values highlighted.
+
+```{r raster-plot, fig.cap= "Meta's HRSL population density raster file plotted with aggregation factor 60 for visualization purposes"}
+
+#read in raster
+ca_pop_raster <- rast("data/ca_sample/population/ca_30m_pop_density_hrsl_2020.tif")
+#aggregate first, then round
+pop_aggregate_60 <- ca_pop_raster %>% 
+  terra::aggregate(fact = 60, 
+                   fun = sum, 
+                   na.rm = TRUE)
+
+#next, let's round 
+pop_aggregate_60 <- terra::round(pop_aggregate_60)
+
+#now, let's drop all 0's. 
+pop_aggregate_60[pop_aggregate_60==0] <- NA
+
+# --- shared plot function ---
+make_map <- function(raster, title_label) {
+  ggplot() +
+    geom_sf(
+      ca_counties,
+      mapping   = aes(geometry = geometry),
+      color     = "grey40",
+      fill      = NA,
+      linewidth = 0.2
+    ) +
+    geom_spatraster(data = raster) +
+    scale_fill_viridis_c(
+      name     = "**Population**<br><span style='color:grey60;font-size:8pt'>30m<sup>2</sup> cell sum</span>",
+      na.value = NA,
+      trans    = "log10",
+      option   = "viridis"
+    ) +
+    labs(title = title_label,
+    subtitle = "30m HRSL aggregated by factor of 60 (sum)",
+    caption  = "**Data** Meta | **Plot** JP") +
+    theme_void() +
+    theme(
+    plot.margin     = margin(.5, .5, .25, .5, "cm"),
+    legend.position = "right",
+    legend.title = element_markdown(),
+    plot.background = element_rect(fill = "white", color = NA),
+    plot.title      = element_markdown(hjust = 0.5),
+    plot.subtitle   = element_text(hjust = 0.5, color = "grey40"),
+    plot.caption    = element_markdown(color = "grey20", hjust = 0.5)
+    )
+}
+
+dens_map <- make_map(pop_aggregate_60,"**Aggregated Population Raster — California**")
+
+dens_map
+```
+
+Next, we will consider each non-zero value cell of the aggregated raster file as a likely candidate. Initially, let each cell be pulled with probability $P_{i,j} = \frac{\text{(population value)}_{i,j}}{\sum_{i,j}(\text{population value}_{i,j})}$. Visually, this sampling suggests that areas with a lighter shade are more likely to be selected than areas that are darker. This sampling scheme ensures that locations are selected where most Californian's reside as high population areas are more likely to be sampled. Note, points will be drawn without replacement to avoid duplicate locations. We will draw $n=5,000$ points in this manner.
+
+Because this sampling procedure doesn't provide a regularity/minimum distance between points, the sampled locations are more likely to clump in high-population density locations. To attempt to minimize spatial autocorrelation, we will apply a 1 km and 5 km thinning to the sample. This thinning ensures that each point is at least 1 km or 5 km from each nearby points and from each prison. For further analysis, both samples will be considered as a sensitivity analysis. The 1 km and 5 km thins were drawn with seed 513 and have `r nrow(df_1km_sf)`, `r nrow(df_5km_sf)` observations, respectively (before `NA`'s are dropped). This thinning scheme can be seen in figure \@ref(fig:sampled_points_plots).
+
+It is worth noting that spatial thinning is not the only approach available for addressing spatial autocorrelation. An alternative strategy would be to fit a spatial model — for example, one that explicitly incorporates a spatial covariance or autocorrelation structure — using the full, un-thinned sample rather than discarding points to approximate independence. Such an approach would retain more of the sampled data and could directly model spatial dependence rather than attempting to reduce it through subsampling. We opted for thinning in this analysis for its relative simplicity and interpretability, but a spatial modeling approach remains a reasonable direction for future work.
+
+Next, to match the median square footage of the carceral facilities, we will apply a buffer to each sampled and thinned point of with a radius of 140.4 m (to match the median square footage of the prisons). Environmental harm indicators will then be run on these buffered points using CSU's Geospatial Centroid's environmental justice code base.
+
+```{r sampled_points_plots, fig.cap="Sampled residential areas and subsequent 1 km and 5 km thinned samples"}
+
+#get centroids
+#entire sample
+df_wgs_all <- df_sf_all %>% 
+  st_transform(4326) %>% 
+  mutate(
+    lon = st_coordinates(st_centroid(st_geometry(.)))[,1],
+    lat = st_coordinates(st_centroid(st_geometry(.)))[,2]
+  )
+
+#1km thin
+df_wgs_1km <- df_1km_sf %>% 
+  st_transform(4326) %>% 
+  mutate(
+    lon = st_coordinates(st_centroid(st_geometry(.)))[,1],
+    lat = st_coordinates(st_centroid(st_geometry(.)))[,2]
+  )
+
+#5km thin 
+df_wgs_5km <- df_5km_sf %>% 
+  st_transform(4326) %>% 
+  mutate(
+    lon = st_coordinates(st_centroid(st_geometry(.)))[,1],
+    lat = st_coordinates(st_centroid(st_geometry(.)))[,2]
+  )
+
+#CA prisons
+ca_prisons_wgs <- ca_prisons_sf %>% 
+  st_transform(4326) %>% 
+  mutate(
+    lon = st_coordinates(st_centroid(st_geometry(.)))[,1],
+    lat = st_coordinates(st_centroid(st_geometry(.)))[,2]
+  )
+
+map_points <- function(points_df, title_text){
+  ggplot() +
+  # county boundaries
+  geom_sf(
+    data = ca_counties,
+    aes(geometry = geometry),
+    color = "grey40",
+    fill = NA,
+    linewidth = 0.2
+  ) +
+  # sampled residential points
+  geom_sf(
+    data = points_df,
+    color = "black",
+    fill = "black",
+    pch = 21,
+    size = 2,
+    stroke = 0.05,
+    alpha = 0.5
+  ) +
+  labs(
+    subtitle = title_text
+  )+
+  theme_void() +
+  theme(
+    plot.margin = margin(.05,.15,.15,.15,"cm"),
+    legend.position = "none",
+    legend.title = element_markdown(),
+    plot.background = element_rect(fill = "white", color = NA),
+    plot.title = element_markdown(hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5, color = "grey40"),
+    plot.caption = element_markdown(color = "grey20", hjust = 0.5)
+  )
+}
+
+all <- map_points(df_wgs_all, "Entire Sample")
+thin_1km <- map_points(df_wgs_1km, "1 km Thinned Sample")  
+thin_5km <- map_points(df_wgs_5km, "5 km Thinned Sample")
+prisons <- map_points(ca_prisons_wgs, "California Prisons")
+
+combined_plots <- (all | thin_1km | thin_5km | prisons)+
+  plot_layout(guides = "collect") +
+  plot_annotation(title = "Population Weighted Sampling with 1 km and 5 km Thins and California Prisons") &
+  theme(legend.position = "bottom")
+
+combined_plots
+```
+
+To assess whether thinning meaningfully reduced spatial autocorrelation, we will will compute spatial correlograms for each indicator (Moran's I across 10 km distance bins via `ncf::correlog`) for the 1 km thin, 5 km thin, and prison locations. The two thins showed similar correlation decay for most indicators, suggesting 5 km offered little improvement over 1 km. Note, this is a descriptive comparison, as no formal significance testing was applied. Given this, as a team we prefer the 1 km thin as it retains a much larger sample while preserving urban representation, whereas the 5 km thin disproportionately drops urban points, making urban and rural samples appear oddly similar for a state as spatially heterogeneous as California. (In other words, as shown below the in the 5 km thin, the number of urban and rural points are almost identical, while almost 95% of the residents of California live in an urban area.) We therefore used the 1 km thin as our primary sample, keeping the 5 km thin as a sensitivity check.
+
+```{r spatial-correleogram, cache = TRUE, eval = FALSE}
+raw_all <- c("flood_risk_percent", "wildfire_risk","lst_avg", 
+             "percent_tree_cover", "mean_ozone", "avg_pm25",
+             "pesticide_mean_kg","trafficProx", "npl_prox", 
+             "rmp_prox", "haz_prox")
+
+#make sure all datasets are the on the same crs
+datasets_thinned <- list(df_1km_sf = df_1km_sf,
+                         df_5km_sf=df_5km_sf,
+                         ca_prisons_sf=ca_prisons_sf)
+datasets_albers <- lapply(datasets_thinned, st_transform, crs = 3310)
+
+# Precompute coords once per dataset
+coords_list <- lapply(datasets_albers, function(sf_obj) {
+  st_coordinates(st_centroid(sf_obj))
+})
+
+all_corr <- map_dfr(raw_all, 
+                    function(var){
+  map_dfr(names(datasets_albers), function(dataset){
+    sf_obj <- datasets_albers[[dataset]]
+    coords <- coords_list[[dataset]]
+    vals <- sf_obj[[var]]
+    
+    fit <- ncf::correlog(x = coords[,1], y = coords[,2], z = vals,
+                         increment = 10000, resamp = 0, na.rm = TRUE)
+    
+    data.frame(mean.of.class = fit$mean.of.class,
+               correlation = fit$correlation) %>%
+      mutate(dataset = dataset, variable = var)
+  })
+})
+
+all_corr <- all_corr %>% 
+  filter(correlation >= -1, correlation <= 1)
+
+all_corr %>% ggplot(aes(x = mean.of.class / 1000, y = correlation, color = dataset)) +
+  geom_line() +
+  geom_hline(yintercept = 0, linetype = "dashed", color = "grey50") +
+  xlim(0,500)+
+  facet_wrap(~ variable) +
+  labs(x = "Distance (km)", y = "Moran's I", color = NULL) +
+  theme_minimal()
+```
+
+
+### Urban vs. Rural Stratification
+
+Next, it is of interest to know which points in our drawn sample are delineated as urban or rural. To define urban and rural we will utilize the US Census's 2020 Urban Areas shape file filtered to California as the locations are marked are using the census's new definition of urban (https://www.census.gov/programs-surveys/geography/guidance/geo-areas/urban-rural.html). If one of our sampled points and prisons intersects with one of the polygons, we will mark the point as urban, if a point does not intersect, we will call it rural. This scheme is mapped below--blue points are points that intersect an urban area, while green points don't and are marked as rural.
+
+```{r urban_v_rural_demographics}
+# #check crs
+# st_crs(df_sf_all)==st_crs(ca_urban_areas)
+ca_urban_areas <- st_transform(ca_urban_areas,crs=crs(df_sf_all))
+ca_prisons_sf <- st_transform(ca_prisons_sf,crs=crs(df_sf_all))
+
+#add urban column to prisons using Urban Area Delineation
+ca_prisons_sf$urban <- lengths(st_intersects(ca_prisons_sf,ca_urban_areas))>0
+
+#make nice kable table 
+urban_table <- tibble(
+  `Data Source` = c("Entire Sample", "1 km Thin","5 km Thin", "Prisons"),
+  Rural = c(sum(!df_sf_all$urban),
+            sum(!df_1km_sf$urban),
+            sum(!df_5km_sf$urban),
+            sum(!ca_prisons_sf$urban)),
+  Urban = c(sum(df_sf_all$urban),
+            sum(df_1km_sf$urban),
+            sum(df_5km_sf$urban),
+            sum(ca_prisons_sf$urban)), 
+  Total = c(nrow(df_sf_all),
+            nrow(df_1km_sf),
+            nrow(df_5km_sf),
+            nrow(ca_prisons_sf))
+)
+
+urban_table %>% 
+  kbl(
+  caption = "No. of Urban and Rural Locations by Data Source",
+  format = "pandoc"
+) 
+
+```
+
+```{r urban_rural_map}
+la_counties_plus <- ca_counties %>% st_transform(crs=crs(df_1km_sf)) %>% 
+  filter(NAME%in%c("Los Angeles","Orange"))
+la_urban_areas <- ca_urban_areas %>% filter(NAME20 == "Los Angeles--Long Beach--Anaheim, CA")
+la_points <- df_1km_sf[la_counties_plus,]
+#map 1 km thin
+urban_rural_example <- ggplot() +
+  # Counties
+  geom_sf(
+    data = la_counties_plus,
+    fill = NA,
+    color = "grey40",
+    linewidth = 0.2
+  ) +
+  # Urban area polygons
+  geom_sf(
+    data = la_urban_areas,
+    fill = "dodgerblue",
+    color = NA,
+    alpha = 0.3
+  ) +
+  # Sample points
+  geom_sf(
+    data = la_points,
+    aes(color = urban),
+    size = 2,
+    alpha = 0.7,
+    key_glyph = draw_key_point
+  ) +
+  scale_color_manual(
+    values = c(`TRUE` = "dodgerblue", `FALSE` = "lightgreen"),
+    labels = c("Rural", "Urban"),
+    name = "Location Type"
+  ) + 
+  labs(title = "1km Thinned Sampled Filtered to LA and Orange County",
+       subtitle = "Colored by Urbanicity as Designated by US Census")+
+  theme_void() +
+  theme(
+    plot.margin = margin(.05,.15,.15,.15,"cm"),
+    legend.position = "right",
+    legend.title = element_markdown(),
+    plot.background = element_rect(fill = "white", color = NA),
+    plot.title = element_markdown(hjust = 0.5),
+    plot.subtitle = element_text(hjust = 0.5, color = "grey40"),
+    plot.caption = element_markdown(color = "grey20", hjust = 0.5)
+  )
+  urban_rural_example
+```
+
+### Hypothesis Testing
+
+After running the buffered points through the code base, points with NA values will be dropped. Most commonly, NA's occur for indicators flood risk percent, land surface temperature, and average pesticide yield. If a location doesn't receive a flood risk percent and is marked NA, this implies that it isn't near a body of water that would provide a flood risk to the point. So, dropped points in our analysis mean that that point isn't near water. Locations that don't get a land surface temperature value or an average pesticide yield occur due to cloud cover and the method of calculation. Both indicators utilize satellites, and if a location is consistently covered in clouds, it won't receive a value. After removing all NA's we have `r nrow(df_1km)` and `r nrow(df_5km)` sampled residential locations in the 1 km and 5 km thinned samples, respectively. Additionally, there are `r nrow(ca_prisons)` Californian state and federal prisons after NA's are removed.
+
+To determine if Californian prisons have worse environmental hazard indicators than our sampled residential areas, we will consider two types inferential tests: a global test, where all indicators are considered together, and an exploratory indicator-level tests, to determine which individual means are worse than prisons. These tests will first be considered without stratification, and then the stratification will be applied. In other words, we will perform this test without delineating points as urban and rural, and then we will delineate points as urban and rural to see how the tests perform. To account for high skew values, we will utilize non-parametric hypothesis testing procedures, as normality assumptions on the data may not be present. While it is true that averages of large samples tend to be normally distributed (by the central limit theorem), we prefer not to rely on this approximation given the skewed nature of environmental data.
+
+For these hypothesis tests, it is important to note that we have **all available** `r nrow(ca_prisons)` Californian state and federal prisons. Thus, we will assume that we have the entire population of prisons, and as such the mean indicators both globally and independently are viewed as fixed and as the truth for the updated codebase provided by CSU. As such, we will be testing our randomly sampled points against the fixed prison values to determine if there is a difference. Consequently, the substantial difference in sample size between the prisons and the residential samples for the 1 km and 5 km thins does not threaten the validity of the comparisons made here. Because prison indicator values are treated as fixed population parameters rather than estimates subject to their own sampling variability, the relevant comparison is between the residential sample and a known, fixed reference — not between two samples of comparable size drawn from populations of unknown size.
+
+Our first test is a global hypothesis test, where we will test if the multivariate mean indicator vector for all sampled residential points is less than the fixed multivariate mean indicator vector for all prisons. Formally stated, our hypothesis test is\
+$$
+\text{H}_0: \boldsymbol{\mu}_\text{Residences} = \boldsymbol{\mu}_{\text{Prisons}}\text{ vs. } \text{H}_1: \boldsymbol{\mu}_\text{Residences} < \boldsymbol{\mu}_\text{Prisons}.
+$$\
+
+To test this hypothesis, we subtract the prison population mean from the residential value for each indicator. Under $\text H_1$, these differences should all be negative — meaning every indicator is lower for residences than for prisons. We multiply these differences by -1 so that a positive value means the residence is better off on that indicator, allowing us to reframe the hypothesis as testing whether the average flipped differences are greater than zero across all indicators simultaneously. In other words our test becomes   
+$$  
+\text{H}_0: \boldsymbol{\delta}^* = 0 \text{ vs. } \text{H}_1: \boldsymbol{\delta}^* > 0,
+$$  
+where $\boldsymbol\delta^* = -1\cdot(\boldsymbol{\mu_\text{Residences}}-\boldsymbol{\mu_\text{Prisons}})$.  
+This is purely a bookkeeping convenience that allows us to apply the positive orthant bootstrap test of Minhajuddin et al. (2007) directly and does not affect our conclusions. A standard multivariate test of means assumes the data follow a multivariate normal distribution — essentially that all the indicators together follow a specific bell-curve shape jointly. For environmental data, this is often not realistic because environmental indicators tend to be right-skewed (most locations have moderate values but a few have very large values). The joint normality assumption across all indicators simultaneously is a strong requirement that is difficult to verify. So, while it is true that averages of large samples tend to be normally distributed (by the central limit theorem), we prefer not to rely on this approximation given the skewed nature of environmental data. Instead, we use a bootstrap test, which works by repeatedly resampling our data to build up a picture of what results would look like by chance if there were no true difference between prisons and sampled residential areas. This approach makes no assumptions about the shape of the data distribution and has been shown to perform well even when data are skewed.
+
+Here, our test is marked as significant if the observed average flipped difference is much greater than all of the resampled flipped differences--indicating that the observed average flipped difference very likely couldn't have occurred by chance if the null hypothesis were true. Note, a significant result here implies that the prisons' environmental harm indicators are worse than Californian residential areas. On the other hand, if we fail to reject the null hypothesis, this indicates that there is not enough evidence to suggest that prisons' environmental harm indicators are worse than Californian residential areas.
+
+Because the global test doesn't tell us which environmental hazard indicators are worse for prisons, as an independent set of exploratory analyses, we want to determine which indicators are flagged. To test these, we will perform 11 univariate one-sided bootstrap tests, one per indicator. We will utilize the same flipped difference set up from before, implying that a large, positive observed test statistic indicates that environmental hazards are indeed worse for prisons. To control the false discovery rate, we will apply the Benjamini - Hochberg control procedure. Here, we will also utilize a bootstrap test to avoid normality constraints.
+
+Finally, we perform these with via the urban/rural stratification presented above. So, urban prisons will be tested against urban residential areas and rural prisons will be tested against rural residential areas. These hypothesis tests are then reframed as the following:
+
+$$
+\text{H}_0: \boldsymbol \mu_{\text{Urban Residences}} = \boldsymbol{\mu}_\text{Urban Prisons}\text{ vs. } \text{H}_1: \boldsymbol{\mu}_\text{Urban Residences} < \boldsymbol{\mu}_\text{Urban Prisons}\\
+\text{H}_0: \boldsymbol \mu_{\text{Rural Residences}} = \boldsymbol{\mu}_\text{Rural Prisons}\text{ vs. } \text{H}_1: \boldsymbol{\mu}_\text{Rural Residences} < \boldsymbol{\mu}_\text{Rural Prisons}.
+$$
+
+Before displaying results, it is worth noting what our bootstrap approach does and does not address. (Particularly because correlograms suggested some residual spatial dependence may remain even after thinning.) The multivariate test allows an unknown, non-diagonal covariance among indicators rather than assuming independence between them, and the indicator-level tests resample by row, preserving within-observation dependence across indicators. Neither approach, however, resamples with spatial awareness, so dependence between sampled locations is not directly accounted for. Results should be interpreted with this in mind.
+
+## Results
+
+### Global test
+
+#### Before Stratification
+
+The global bootstrap test indicated a statistically significant difference between residential and prison environmental hazard indicators for the 1 km thinned sample ($n = 3186$, observed statistic $=1.814$, $p = 0.004$), providing evidence at $\alpha = 0.05$ that Californian prisons face worse environmental hazard conditions than residential areas overall. The 5 km thinned sample did not reach significance ($n = 770$, observed statistic = $0.606$, $p= 0.143$). This discrepancy suggests the signal detected in the 1 km sample may be sensitive to the degree of spatial thinning applied — a coarser thin reduces sample size substantially (from 3186 to 770 points) and may attenuate the ability to detect a difference, or alternatively, the association between prison locations and worse indicators may be more localized than a 5 km separation preserves.
+
+```{r global_tests}
+#transform data to perform global test
+test_data_1km <- df_1km %>% 
+  mutate(inv_percent_tree_cover = 100 - percent_tree_cover) %>%
+  select(c(flood_risk_percent, wildfire_risk, lst_avg, inv_percent_tree_cover, 
+           mean_ozone, avg_pm25, pesticide_mean_kg, trafficProx,
+           npl_prox,rmp_prox,haz_prox)) %>% 
+  mutate(across(c(flood_risk_percent, wildfire_risk, lst_avg, inv_percent_tree_cover, 
+           mean_ozone, avg_pm25, pesticide_mean_kg, trafficProx,
+           npl_prox,rmp_prox,haz_prox),
+           ~-1*(.x-mean(ca_prisons_sf[[cur_column()]]))))
+
+test_data_5km <- df_5km %>% 
+  mutate(inv_percent_tree_cover = 100 - percent_tree_cover) %>% 
+  select(c(flood_risk_percent, wildfire_risk, lst_avg, inv_percent_tree_cover, 
+           mean_ozone, avg_pm25, pesticide_mean_kg, trafficProx,
+           npl_prox,rmp_prox,haz_prox)) %>% 
+  mutate(across(c(flood_risk_percent, wildfire_risk, lst_avg, inv_percent_tree_cover, 
+           mean_ozone, avg_pm25, pesticide_mean_kg, trafficProx,
+           npl_prox,rmp_prox,haz_prox),
+           ~-1*(.x-mean(ca_prisons_sf[[cur_column()]]))))
+
+test_1km <- multivariate_bootstrap(1234, 1000, test_data_1km)
+u_stars_1km <- test_1km$u_stars %>% as.data.frame()
+#summary(u_stars_1km)
+#test_1km$p
+
+u_1 <- u_stars_1km%>% 
+  ggplot(aes(x= .))+
+  geom_histogram( )+
+  geom_vline(xintercept = test_1km$u_obs, ,color = "red")+
+  labs(title = "1 km Thinned Bootstrap Resamples",
+       x="Bootstrap Resamples",
+       y="Frequency")+
+  theme_minimal()
+
+test_5km <- multivariate_bootstrap(1234, 1000, test_data_5km)
+u_stars_5km <- test_5km$u_stars %>% as.data.frame()
+#summary(u_stars_5km)
+#test_5km$p
+
+u_5 <- u_stars_5km%>% 
+  ggplot(aes(x= .))+
+  geom_histogram( )+
+  geom_vline(xintercept = test_5km$u_obs, ,color = "red")+
+  labs(title = "5 km Thinned Bootstrap Resamples",
+       x="Bootstrap Resamples",
+       y="Frequency")+
+  theme_minimal()
+
+mult_table <- data.frame(
+  samp.size = c(nrow(test_data_1km),nrow(test_data_5km)),
+  obs.stat = c(test_1km$u_obs,test_5km$u_obs),
+  p_val = c(test_1km$p,test_5km$p)
+)
+rownames(mult_table) <- c("1km Thin","5km Thin")
+
+mult_table %>% 
+  kbl(caption="Observed Statistic and P-Value From Global Test",
+      col.names = c("Sample Size","Obs. Stat","P-Value"),
+      format = "pandoc")
+ 
+
+mult_combined_plots <- (u_1 | u_5)+
+   plot_layout(guides = "collect") +
+  plot_annotation(title = "Multivariate Global Test Bootstrap Resamples")
+
+mult_combined_plots
+```
+
+#### With Stratification
+
+Stratifying by urbanicity showed that the significant global result is concentrated in urban locations. The 1 km urban stratum remained significant ($n= 2932$, observed statistic $=1.126$, $p = 0.006$), while the 1 km rural stratum did not ($n = 254$, observed statistic $=0.382$,$p=0.394$). Neither the 5 km urban stratum ($n = 573$, observed statistic $= 0.782$,$p = 0.169$) nor the rural stratum ($n = 197$, observed statistic $= 0.364$, $p=0.357$) reached significance. Taken together, the evidence for worse environmental hazard indicators near prisons relative to residences is strongest — and only significant — among urban locations sampled at the 1 km thinning distance.
+
+```{r global-urban-v-rural, warning = FALSE, message=FALSE}
+# st_crs(df_sf_all)==st_crs(ca_urban_areas)
+ca_urban_areas <- st_transform(ca_urban_areas,crs=crs(df_sf_all))
+ca_prisons_sf <- st_transform(ca_prisons_sf,crs=crs(df_sf_all))
+
+#add urban column to prisons using Urban Area Delineation
+ca_prisons_sf$urban <- lengths(st_intersects(ca_prisons_sf,ca_urban_areas))>0
+
+#filter via urbanicity
+urban_ca_prisons <- ca_prisons_sf %>% filter(urban==TRUE)
+rural_ca_prisons <- ca_prisons_sf %>% filter(urban==FALSE)
+
+#build urban data
+test_data_1km_urban <- df_1km %>% 
+  filter(urban == TRUE) %>% 
+  mutate(inv_percent_tree_cover = 100 - percent_tree_cover) %>%
+  select(c(flood_risk_percent, wildfire_risk, lst_avg, inv_percent_tree_cover, 
+           mean_ozone, avg_pm25, pesticide_mean_kg, trafficProx,
+           npl_prox,rmp_prox,haz_prox)) %>% 
+  mutate(across(c(flood_risk_percent, wildfire_risk, lst_avg, inv_percent_tree_cover, 
+           mean_ozone, avg_pm25, pesticide_mean_kg, trafficProx,
+           npl_prox,rmp_prox,haz_prox),
+           ~-1*(.x-mean(urban_ca_prisons[[cur_column()]]))))
+
+test_data_5km_urban <- df_5km %>% 
+  filter(urban == TRUE) %>% 
+  mutate(inv_percent_tree_cover = 100 - percent_tree_cover) %>%
+  select(c(flood_risk_percent, wildfire_risk, lst_avg, inv_percent_tree_cover, 
+           mean_ozone, avg_pm25, pesticide_mean_kg, trafficProx,
+           npl_prox,rmp_prox,haz_prox)) %>% 
+  mutate(across(c(flood_risk_percent, wildfire_risk, lst_avg, inv_percent_tree_cover, 
+           mean_ozone, avg_pm25, pesticide_mean_kg, trafficProx,
+           npl_prox,rmp_prox,haz_prox),
+           ~-1*(.x-mean(urban_ca_prisons[[cur_column()]]))))
+
+#build rural data
+test_data_1km_rural <- df_1km %>% 
+  filter(urban == FALSE) %>% 
+  mutate(inv_percent_tree_cover = 100 - percent_tree_cover) %>%
+  select(c(flood_risk_percent, wildfire_risk, lst_avg, inv_percent_tree_cover, 
+           mean_ozone, avg_pm25, pesticide_mean_kg, trafficProx,
+           npl_prox,rmp_prox,haz_prox)) %>% 
+  mutate(across(c(flood_risk_percent, wildfire_risk, lst_avg, inv_percent_tree_cover, 
+           mean_ozone, avg_pm25, pesticide_mean_kg, trafficProx,
+           npl_prox,rmp_prox,haz_prox),
+           ~-1*(.x-mean(rural_ca_prisons[[cur_column()]]))))
+
+test_data_5km_rural <- df_5km %>% 
+  filter(urban == FALSE) %>% 
+  mutate(inv_percent_tree_cover = 100 - percent_tree_cover) %>%
+  select(c(flood_risk_percent, wildfire_risk, lst_avg, inv_percent_tree_cover, 
+           mean_ozone, avg_pm25, pesticide_mean_kg, trafficProx,
+           npl_prox,rmp_prox,haz_prox)) %>% 
+  mutate(across(c(flood_risk_percent, wildfire_risk, lst_avg, inv_percent_tree_cover, 
+           mean_ozone, avg_pm25, pesticide_mean_kg, trafficProx,
+           npl_prox,rmp_prox,haz_prox),
+           ~-1*(.x-mean(rural_ca_prisons[[cur_column()]]))))
+
+#perform global test
+test_1km_urban <- multivariate_bootstrap(1234, 1000, test_data_1km_urban)
+test_1km_rural <- multivariate_bootstrap(1234, 1000, test_data_1km_rural)
+
+test_5km_urban <- multivariate_bootstrap(1234, 1000, test_data_5km_urban)
+test_5km_rural <- multivariate_bootstrap(1234, 1000, test_data_5km_rural)
+
+#assemble table
+urban_rural_global_table <- data.frame(
+  thin = c("1 km", "1 km", "5 km", "5 km"),
+  type = c("Urban", 
+           "Rural", 
+           "Urban", 
+           "Rural"), 
+  samp.size = c(nrow(test_data_1km_urban),
+                nrow(test_data_1km_rural),
+                nrow(test_data_5km_urban),
+                nrow(test_data_5km_rural)),
+  obs.stat = c(test_1km_urban$u_obs,
+               test_1km_rural$u_obs,
+               test_5km_urban$u_obs,
+               test_5km_rural$u_obs), 
+  p.val = c(test_1km_urban$p,
+            test_1km_rural$p,
+            test_5km_urban$p,
+            test_5km_rural$p)
+)
+```
+
+
+```{r global-urban-v-rural_table, warning = FALSE, message=FALSE}
+urban_rural_global_table %>% 
+  kbl(caption = "Observed Statistic and P-Value from Global Test, Stratified by Urbanicity",
+      col.names = c("Sample","Urbanicity", "Sample Size", "Obs. Stat", "P-Value"),
+      format = "pandoc")
+```
+
+
+```{r global-urban-v-rural_plots, warning = FALSE, message=FALSE}
+#assemble plots
+u1_urban <- test_1km_urban$u_stars %>% as.data.frame() %>% 
+  ggplot(aes(.))+
+  geom_histogram()+
+  geom_vline(xintercept = test_1km_urban$u_obs, ,color = "red")+
+  labs(title = "1 km Thinned Urban Resamples",
+       x="Bootstrap Resamples",
+       y="Frequency")+
+  theme_minimal()
+
+u1_rural <- test_1km_rural$u_stars %>% as.data.frame() %>% 
+  ggplot(aes(.))+
+  geom_histogram()+
+  geom_vline(xintercept = test_1km_rural$u_obs, ,color = "red")+
+  labs(title = "1 km Thinned Rural Resamples",
+       x="Bootstrap Resamples",
+       y="Frequency")+
+  theme_minimal()
+
+u5_urban <- test_5km_urban$u_stars %>% as.data.frame() %>% 
+  ggplot(aes(.))+
+  geom_histogram()+
+  geom_vline(xintercept = test_5km_urban$u_obs, ,color = "red")+
+  labs(title = "5 km Thinned Urban Resamples",
+       x="Bootstrap Resamples",
+       y="Frequency")+
+  theme_minimal()
+
+u5_rural <- test_5km_rural$u_stars %>% as.data.frame() %>% 
+  ggplot(aes(.))+
+  geom_histogram()+
+  geom_vline(xintercept = test_5km_rural$u_obs, ,color = "red")+
+  labs(title = "5 km Thinned Rural Resamples",
+       x="Bootstrap Resamples",
+       y="Frequency")+
+  theme_minimal()
+
+mult_combined_plots_uvr <- (u1_urban | u1_rural)/(u5_urban|u5_rural)+
+   plot_layout(guides = "collect") +
+  plot_annotation(title = "Multivariate Global Test Bootstrap Resamples",
+                  subtitle = "Stratified by Urbanicity")
+
+mult_combined_plots_uvr
+```
+
+### Individual Results
+
+Because the eleven environmental hazard indicators are not independent of one another, the indicator-level bootstrap tests are presented here as exploratory analyses intended to characterize which indicators may be contributing to the significant global results above, rather than as independent confirmatory hypothesis tests in their own right.
+
+In the unstratified 1 km sample, three of eleven indicators remained significant after Benjamini–Hochberg correction: flood risk percent (adj. $p = 0.004$), wildfire risk (adj. $p=0.004$), and mean pesticide application (adj. $p=0.004$). All three showed positive observed statistics, indicating that residential areas fared better than prisons on these specific indicators — consistent with the direction of the significant global result. The remaining eight indicators did not remain significant after adjustment.
+
+Within the 1 km urban stratum — the subgroup driving the significant stratified global result — six of eleven indicators remained significant after correction: flood risk percent, land surface temperature, inverse percent tree cover, mean ozone, mean pesticide application, and proximity to National Priorities List sites (all adj. $p<.002$). As with the unstratified result, all six showed positive observed statistics, again indicating residential areas fared better than prisons on these indicators. Wildfire risk, average PM2.5, traffic proximity, RMP facility proximity, and hazardous waste facility proximity did not remain significant after adjustment.
+
+Full indicator-level results for all six sample/stratification combinations — including the non-significant 5 km, 1 km rural, 5 km urban, and 5 km rural strata — are provided in the accompanying tables for reference.
+
+```{r individual-tests-1km}
+#before stratification
+indv_test_1km <- mean_bootstrap(1234, 1000, test_data_1km)
+indv_test_5km <- mean_bootstrap(1234, 1000, test_data_5km)
+
+#build a table function
+build_table <- function(test_list, title_string){
+  #turn list elements into a data frame
+  test_data_frame <- data.frame(
+    obs_stats = test_list$mu_obs,
+    p_vals = test_list$p_vals
+  )
+  #apply correction to p_values 
+  test_data_frame <- test_data_frame %>% 
+    mutate(adj_p_vals = p.adjust(p_vals,method="BH"))
+  
+  #next, let's display in a table 
+  results_table <- test_data_frame %>% 
+    kbl(caption = title_string,
+        col.names = c("Indicator",
+                      "Obs. Statisitic",
+                      "Original P-Value", 
+                      "Adjusted P-Value"),
+        format = "pandoc")
+  
+  return(results_table)
+}
+
+build_table(indv_test_1km,
+            "1km Thinned Sample Individual Indicator Exploratory Test Results")
+```
+
+
+```{r individual-tests-5km}
+build_table(indv_test_5km,
+            "5km Thinned Sample Individual Indicator Exploratory Test Results")
+```
+
+
+```{r individual-tests-1km-urban}
+#urban vs rural
+#1km
+indv_test_1km_urban <- mean_bootstrap(1234, 1000, test_data_1km_urban)
+indv_test_1km_rural <- mean_bootstrap(1234, 1000, test_data_1km_rural)
+#1km tables
+build_table(indv_test_1km_urban,
+            "1km Thinned Urban Sample Individual Indicator Exploratory Test Results")
+```
+
+
+```{r individual-tests-1km-rural}
+build_table(indv_test_1km_rural,
+            "1km Thinned Rural Sample Individual Indicator Exploratory Test")
+```
+
+
+```{r individual-tests-5km-urban}
+#5km
+indv_test_5km_urban <- mean_bootstrap(1234, 1000, test_data_5km_urban)
+indv_test_5km_rural <- mean_bootstrap(1234, 1000, test_data_5km_rural)
+#5km tables
+build_table(indv_test_5km_urban,
+            "5km Thinned Urban Sample Individual Indicator Exploratory Test Results")
+```
+
+
+```{r individual-tests-5km-rural}
+build_table(indv_test_5km_rural,
+            "5km Thinned Rural Sample Individual Indicator Exploratory Test Results")
+
+```
+
+## Conclusion
+
+This analysis found evidence at $\alpha = 0.05$ that Californian state and federal prisons exhibit worse environmental hazard indicators than sampled residential areas, but only under specific sampling conditions. The global test was significant for the 1 km thinned sample overall ($p=.004$) and, when stratified, remained significant specifically within the urban stratum ($p=0.006$). The 5 km thinned sample did not reach significance, either overall or within either urbanicity stratum, nor did the 1 km rural stratum. Indicator-level exploratory results in the significant strata pointed most consistently to flood risk percent, mean pesticide application, and — in the urban stratum specifically — land surface temperature, inverse tree cover, mean ozone, and NPL proximity as indicators where residential areas fared better than prisons, though these should be interpreted descriptively given the non-independence of indicators noted in the Methods.
+
+Notably, significance depended on thinning distance: the 1 km thin detected a global difference while the 5 km thin did not, despite testing the same underlying population of prisons. This may reflect reduced statistical power at the coarser thin, where sample size dropped substantially (from 3186 to 770 points). Alternatively, it may indicate that the relationship between prison siting and environmental hazard is more spatially localized than a 5 km separation preserves. The present data cannot distinguish between these two explanations, and this sensitivity should be treated as an open methodological question rather than a resolved one.
+
+Several limitations bound the scope of these conclusions. First, the eleven environmental indicators are not independent, so the indicator-level tests reported here are exploratory rather than confirmatory; they should be read as suggestive of which indicators may contribute to the overall global result, not as standalone findings. Second, because this analysis includes the full available population of Californian state and federal prisons rather than a sample, prison-level means are treated as fixed reference values; inference is limited to characterizing how sampled residential locations compare to this fixed population, not to generalizing about prisons beyond those observed. Third, because no standard, statewide definition of a "residential neighborhood" exists in available Californian data, the residential comparison group was constructed via population-weighted sampling and buffering rather than drawn from an established administrative unit; results are conditional on this sampling design. Fourth, indicators with missing values (flood risk percent, land surface temperature, and average pesticide yield, in particular) were dropped rather than imputed; if the mechanisms producing these missing values are related to the indicators of interest, this could introduce bias not accounted for here. Finally, the rural strata were considerably smaller than the urban strata (1 km rural: $n = 254$; 5 km rural: $n = 197$), and the lack of significance in these groups may reflect limited statistical power rather than a true absence of difference.
+
+Taken together, these results indicate that Californian prisons show worse environmental hazard indicators than residential areas under some, but not all, sampling conditions examined — most consistently in urban locations at finer spatial resolution.
+
+\newpage 
+## Appendix Code
+
+### Urban and Rural CA Prisons  
+```{r urban_rural_prison_delination}
+#redo urban vs rural prisons to include info about prisons
+#read in prison shape file again
+ca_prisons_sf <- read_sf("outputs/final_df_2026-04-29.gpkg") %>% 
+  filter(STATE == "CA")
+ca_urban_areas <- st_transform(ca_urban_areas,crs = crs(df_sf_all))
+ca_prisons_sf <- st_transform(ca_prisons_sf,crs=crs(df_sf_all))
+
+#add urban column to prisons using Urban Area Delineation
+ca_prisons_sf$urban <- lengths(st_intersects(ca_prisons_sf,ca_urban_areas))>0
+
+#uncomment code to resave prison meta data for urban and rural: 
+# #save urban cali prisons as shapefile and csv in outputs/comparison/prison_metadata/
+# urban_ca_prisons <- ca_prisons_sf %>% 
+#   filter(urban==TRUE)
+# write_sf(urban_ca_prisons,
+#          paste0("outputs/comparison/ca_prisons_metadata/urban_ca_prisons_",Sys.Date(),".gpkg"))
+# urban_ca_prisons <- urban_ca_prisons %>% 
+#   st_drop_geometry()
+# write_csv(urban_ca_prisons,
+#           paste0("outputs/comparison/ca_prisons_metadata/urban_ca_prisons_",Sys.Date(),".csv"))
+# 
+# #save rural cali prisons as shapefile and csv in outputs/comparison/prison_metadata/
+# rural_ca_prisons <- ca_prisons_sf %>% 
+#   filter(urban==FALSE)
+# write_sf(rural_ca_prisons,
+#          paste0("outputs/comparison/ca_prisons_metadata/rural_ca_prisons_",Sys.Date(),".gpkg"))
+# rural_ca_prisons <- rural_ca_prisons %>% 
+#   st_drop_geometry()
+# write_csv(rural_ca_prisons,
+#           paste0("outputs/comparison/ca_prisons_metadata/rural_ca_prisons_",Sys.Date(),".csv"))
+
+#filter for tables
+urban_ca_prisons <- ca_prisons_sf %>%
+  filter(urban == TRUE) %>% 
+  select(FACILITYID,
+         OBJECTID,
+         NAME,
+         ADDRESS,
+         CITY,
+         STATE,
+         ZIP,
+         TYPE) %>% 
+  mutate(COMBINED_ADDRESS = paste0(ADDRESS," ",CITY,", ",STATE," ",ZIP)) %>% 
+  st_drop_geometry()
+
+rural_ca_prisons <- ca_prisons_sf %>% 
+  filter(urban == FALSE) %>% 
+  select(FACILITYID,
+         OBJECTID,
+         NAME,
+         ADDRESS,
+         CITY,
+         STATE,
+         ZIP,
+         TYPE) %>% 
+  mutate(COMBINED_ADDRESS = paste0(ADDRESS," ",CITY,", ",STATE," ",ZIP)) %>% 
+  st_drop_geometry()
+```
+
+```{r urban_rural_prison_delination-urban-table}
+#build tables
+urban_ca_prisons %>% 
+  select(FACILITYID,
+         OBJECTID,
+         NAME,
+         COMBINED_ADDRESS,
+         TYPE) %>% 
+  kbl(caption = "Urban Californian Prison Meta Data",
+      col.names = c("Facility ID", "Object Id","Name", "Full Address", "Facility Type"),
+      format = "pandoc")
+```
+
+```{r urban_rural_prison_delination-rural-table}
+rural_ca_prisons %>% 
+  select(FACILITYID,
+         OBJECTID,
+         NAME,
+         COMBINED_ADDRESS,
+         TYPE) %>% 
+  kbl(caption = "Rural Californian Prison Meta Data",
+      col.names = c("Facility ID", "Object Id", "Name", "Full Address", "Facility Type"),
+      format = "pandoc")
+  
+```
+
+### Reference Code  
+```{r ref.label=knitr::all_labels(), echo=TRUE, eval=FALSE}
+```

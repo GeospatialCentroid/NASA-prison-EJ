@@ -19,7 +19,7 @@ To avoid weird computing, I will compute indicators for all 5,000 points and cor
 
 There are 11 indicators in this code base. The majority of which are calculated in R, and have their own functions in the `R/` folder. Two indicators (canopy cover and heat exposure) are calculated via Google Earth Engine and have stand alone Python scripts in the 'python/' folder.
 
-Component scores will not be calculated for these data.
+Component scores will not be calculated for these data. Use the function `load_ca_samples` in the `analysis/` folder to return the thinned subsets. 
 
 First set up the environment with all required libraries via "setup.R" file, and load in data of interest.
 
@@ -168,7 +168,7 @@ haz_prox <- calc_haz_waste_proximity(
 
 ### Final Data Frame
 
-Because many indicators take a long time to run, let's read in each of the indicators. (In other words, it may be unrealistic to generate each indicator in a single session.) Be sure to read in indicators from GEE as well!
+Because many indicators take a long time to run, let's read in each of the indicators. (In other words, it may be unrealistic to generate each indicator in a single session.) Be sure to read in indicators from GEE as well--note these updates are held in `data/ca_sample/`.
 
 ```{r}
 # read in indicators 
@@ -177,9 +177,12 @@ flood_risk <- read_csv("outputs/comparison/flood_risk_2026-06-01.csv")
 
 wildfire_risk <- read_csv("outputs/comparison/wildfire_risk_2026-06-01.csv")
 
-#heat_exp <- read_csv("outputs/comparison/....") %>% group_by(object_id)...
+heat_exp <- read_csv("data/ca_sample/ca_comparison_lst_daily_MODIS_2026-06-17.csv") %>% 
+  group_by(object_id) %>%
+  summarise(lst_avg = median(LST_mean, na.rm = TRUE))
 
-#canopy_cover <- read_csv("outputs/comparison/....") 
+canopy_cover <- read_csv("data/ca_sample/ca_sample_canopy_CONUS.csv")%>%
+  rename(percent_tree_cover = NLCD_Percent_Tree_Canopy_Cover)
 
 # environmental exposures:
 ozone <- read_csv("outputs/comparison/ozone_2026-06-01.csv")
@@ -188,7 +191,7 @@ pm25 <- read_csv("outputs/comparison/pm25_2026-06-01.csv")
 
 pesticides <- read_csv("outputs/comparison/pesticides_2026-06-02.csv")
 
-#traffic <- read_csv("outputs/comparison/...")
+traffic <- read_csv("outputs/comparison/traffic_proximity_2026-06-26.csv")
 
 # environmental effects: 
 npl_prox <- read_csv("outputs/comparison/npl_proximity_2026-06-01.csv")
@@ -196,27 +199,27 @@ npl_prox <- read_csv("outputs/comparison/npl_proximity_2026-06-01.csv")
 rmp_prox <- read_csv("outputs/comparison/rmp_proximity_2026-06-01.csv")
 
 haz_prox <- read_csv("outputs/comparison/hazardous_waste_proximity_2026-06-01.csv")
+
+# urban vs. rural 
+ca_urban_areas <- read_sf("data/ca_sample/tl_2020_us_uac20/tl_2020_us_uac20.shp") %>% 
+  filter(str_ends(NAME20, " CA")) 
 ```
 
-Next, let's combine into one data frame and save each subset as presented above.
+Next, let's combine into one data frame and save outputs. Again thinned subsets can be retrieved via the function `load_ca_samples` found in the `analysis/` folder
 
 ```{r}
 # combine into single data frame 
-# (again, be sure to update with GEE indicators and traffic_prox)
 final_df <- list(ca_residences,
-                 flood_risk, wildfire_risk, 
-                 ozone, pm25, pesticides, 
-                 npl_prox, rmp_prox,haz_prox) %>% 
+                 flood_risk, wildfire_risk, heat_exp, 
+                 canopy_cover, ozone, pm25, pesticides, 
+                 traffic,npl_prox, rmp_prox, haz_prox) %>% 
   purrr::reduce(left_join, by = "object_id") %>% 
   #make object id a character
   mutate(object_id = as.character(object_id)) 
 
-#subset to thinned samples
-final_df_1km <- final_df %>% 
-  filter(object_id %in% thin_1km$object_id)
-
-final_df_5km <- final_df %>% 
-  filter(object_id %in% thin_5km$object_id)
+# add urban vs rural to entire data set
+ca_urban_areas <- st_transform(ca_urban_areas,crs = crs(final_df))
+final_df$urban <- lengths(st_intersects(final_df,ca_urban_areas))>0 
 
 #save as csv and as shapefile for future analysis
 # entire sample:
@@ -225,19 +228,4 @@ final_df %>% st_as_sf() %>% write_sf(paste0("outputs/comparison/final_df_all_", 
 final_df %>%
   select(-geom) %>% 
   write_csv(paste0("outputs/comparison/final_df_all_", Sys.Date(), ".csv"))
-
-# 1km:
-final_df_1km %>% st_as_sf() %>% write_sf(paste0("outputs/comparison/final_df_1km_", Sys.Date(), ".gpkg"))
-
-final_df_1km %>%
-  select(-geom) %>% 
-  write_csv(paste0("outputs/comparison/final_df_1km_", Sys.Date(), ".csv"))
-
-# 5km: 
-final_df_5km %>% st_as_sf() %>% write_sf(paste0("outputs/comparison/final_df_5km_", Sys.Date(), ".gpkg"))
-
-final_df_5km %>%
-  select(-geom) %>% 
-  write_csv(paste0("outputs/comparison/final_df_5km_", Sys.Date(), ".csv"))
-
 ```

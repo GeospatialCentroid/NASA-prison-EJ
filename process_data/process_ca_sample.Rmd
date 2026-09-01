@@ -17,7 +17,7 @@ library(mapview) #quick interactive plots
 ca_prisons <- read_sf("data/phase2/processed/prisons/study_prisons.gpkg") %>% 
   filter(STATE == "CA")
 
-ca_pop_raster <- rast("data/phase2/raw/population/ca_30m_pop_density_hrsl_2020.tif")
+ca_pop_raster <- rast("data/ca_sample/population/ca_30m_pop_density_hrsl_2020.tif")
 ```
 
 The raster has a resolution of ~30m for each cell. For processing, let's aggregate w/ factor 10, round to the nearest integer, and drop all zeros.
